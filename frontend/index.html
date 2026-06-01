@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AVD Insights Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="title">
+      <h1>AVD Insights Dashboard</h1>
+      <span id="status" class="status">Loading…</span>
+    </div>
+    <div class="controls">
+      <label for="hostpool">Host pool</label>
+      <select id="hostpool">
+        <option value="all">All host pools</option>
+      </select>
+      <label for="range">Time range</label>
+      <select id="range">
+        <option value="1h">Last 1 hour</option>
+        <option value="24h" selected>Last 24 hours</option>
+        <option value="7d">Last 7 days</option>
+        <option value="30d">Last 30 days</option>
+      </select>
+      <button id="refresh">Refresh</button>
+      <label class="auto"><input type="checkbox" id="auto" checked /> Auto (60s)</label>
+      <span class="sep"></span>
+      <select id="dataset" title="Dataset to export">
+        <option value="">Export dataset…</option>
+      </select>
+      <button id="export">Export CSV</button>
+    </div>
+  </header>
+
+  <div id="alerts" class="alerts hidden"></div>
+  <div id="banner" class="banner hidden"></div>
+
+  <section class="kpis" id="kpis"></section>
+
+  <main>
+    <section class="panel-group">
+      <h2>Connection health</h2>
+      <div class="grid">
+        <div class="card"><h3>Attempts vs connected</h3><canvas id="c_conn"></canvas></div>
+        <div class="card"><h3>Active users</h3><canvas id="c_users"></canvas></div>
+        <div class="card"><h3>By connection type</h3><canvas id="c_ctype"></canvas></div>
+        <div class="card"><h3>Top users</h3><canvas id="c_topusers"></canvas></div>
+      </div>
+    </section>
+
+    <section class="panel-group">
+      <h2>Errors &amp; issues</h2>
+      <div class="grid">
+        <div class="card"><h3>Errors over time</h3><canvas id="e_ts"></canvas></div>
+        <div class="card"><h3>Top error codes</h3><canvas id="e_codes"></canvas></div>
+        <div class="card"><h3>Errors by session host</h3><canvas id="e_host"></canvas></div>
+      </div>
+    </section>
+
+    <section class="panel-group">
+      <h2>Host pool performance</h2>
+      <div class="grid">
+        <div class="card"><h3>Avg CPU %</h3><canvas id="h_cpu"></canvas></div>
+        <div class="card"><h3>Avg available memory (MB)</h3><canvas id="h_mem"></canvas></div>
+        <div class="card"><h3>CPU % by host</h3><canvas id="h_cpuhost"></canvas></div>
+        <div class="card"><h3>Sessions by host</h3><div id="h_table" class="table-wrap"></div></div>
+      </div>
+    </section>
+
+    <section class="panel-group">
+      <h2>User experience</h2>
+      <div class="grid">
+        <div class="card"><h3>Round-trip time (ms)</h3><canvas id="u_rtt"></canvas></div>
+        <div class="card"><h3>Available bandwidth (KBps)</h3><canvas id="u_bw"></canvas></div>
+        <div class="card"><h3>Logon / connect time (s)</h3><canvas id="u_logon"></canvas></div>
+        <div class="card"><h3>RTT by host (ms)</h3><canvas id="u_rtthost"></canvas></div>
+      </div>
+    </section>
+
+    <section class="panel-group">
+      <h2>Azure file / FSLogix profile performance</h2>
+      <div class="grid">
+        <div class="card"><h3>Profile load time (s)</h3><canvas id="f_ts"></canvas></div>
+        <div class="card"><h3>Profile load by host (s)</h3><canvas id="f_host"></canvas></div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

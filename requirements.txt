@@ -1,0 +1,5 @@
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+azure-identity==1.19.0
+azure-monitor-query==1.4.0
+pydantic-settings==2.7.1
