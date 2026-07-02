@@ -60,6 +60,43 @@ Auth uses `DefaultAzureCredential`, so any of these work with no code change:
   `AZURE_CLIENT_SECRET` in `.env` (app needs Log Analytics Reader)
 - **Managed identity** – if you later host this in Azure
 
+## Architecture
+
+- `backend/main.py` — FastAPI app (`app`); serves the SPA and the JSON API.
+- `backend/azure_client.py` — `DefaultAzureCredential` + `LogsQueryClient`; `run_query()` executes KQL against the workspace for a time range + optional host pool.
+- `backend/queries.py` — 20 named KQL constants (`CONN_*`, `ERR_*`, `PERF_*`, `UX_*`, `PROFILE_*`, `KPI_*`) with `{bin}`/`{HP}` placeholders.
+- `backend/config.py` — Pydantic settings bound to `AVD_*` env vars (workspace, host/port, thresholds).
+- `frontend/` — `index.html` + `app.js` + `styles.css` (vanilla JS, Chart.js via CDN, 60s auto-refresh).
+
+## API endpoints
+
+All return JSON; the data endpoints take `?range=` (1h|24h|7d|30d) and `?hostpool=`.
+
+| Endpoint | Returns |
+|---|---|
+| `GET /` | The dashboard SPA |
+| `GET /api/meta` | Ranges, default range, whether a workspace is configured, thresholds |
+| `GET /api/hostpools` | Host pool names (from `_ResourceId`) for the filter dropdown |
+| `GET /api/overview` | KPI scalars: active users, connections, success rate, errors, affected users, avg RTT, avg profile load |
+| `GET /api/connections` | Timeseries, active users, by connection type, top users |
+| `GET /api/errors` | Error timeseries, top codes, errors by host |
+| `GET /api/hostpool` | Sessions, CPU/memory timeseries, CPU by host |
+| `GET /api/ux` | RTT, bandwidth, RTT by host, logon/connect duration |
+| `GET /api/files` | Profile-load timeseries + by host (FSLogix) |
+
+Each data endpoint includes a `warnings` array so a missing table degrades to a banner instead of a failure.
+
+## Deploying to Azure
+
+No Dockerfile is included, but it containerizes cleanly: Python 3.10+ base, `pip install -r requirements.txt`, run `uvicorn backend.main:app --host 0.0.0.0 --port 8000`. Use a **managed identity** (grant it Log Analytics Reader) rather than a service-principal secret when hosted in Azure.
+
+## Troubleshooting
+
+- **Every panel says "No data"** — check `AVD_WORKSPACE_ID` is the workspace *Customer/Workspace ID* GUID (not the resource ID), and that your identity has Log Analytics Reader.
+- **CPU / memory / profile panels empty, connections work** — `Perf` / `WVDConnectionNetworkData` / `WVDCheckpoints` aren't being collected. See the companion `avd-insite-dashboard` repo's `Enable-AvdInsights.ps1` to turn on collection.
+- **FSLogix panel empty** — checkpoint names vary by agent version; edit the `PROFILE_*` queries in `backend/queries.py` to match your `WVDCheckpoints` names.
+- **Auth errors on start** — run `az login` (or set the `AZURE_*` service-principal vars) before `run.ps1`.
+
 ## Notes / tuning
 
 - Queries target the standard AVD Insights tables: `WVDConnections`,
