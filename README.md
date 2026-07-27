@@ -185,42 +185,69 @@ principal (`AZURE_TENANT_ID/CLIENT_ID/CLIENT_SECRET` in `.env`), or managed
 identity all work unchanged. Agent ingest is authenticated by the
 `X-Agent-Key` shared secret and disabled until `AVD_AGENT_KEY` is set.
 
-## Architecture
+## Module map
 
-- `backend/main.py` — FastAPI app (`app`); serves the SPA and the JSON API.
-- `backend/azure_client.py` — `DefaultAzureCredential` + `LogsQueryClient`; `run_query()` executes KQL against the workspace for a time range + optional host pool.
-- `backend/queries.py` — 20 named KQL constants (`CONN_*`, `ERR_*`, `PERF_*`, `UX_*`, `PROFILE_*`, `KPI_*`) with `{bin}`/`{HP}` placeholders.
-- `backend/config.py` — Pydantic settings bound to `AVD_*` env vars (workspace, host/port, thresholds).
-- `frontend/` — `index.html` + `app.js` + `styles.css` (vanilla JS, Chart.js via CDN, 60s auto-refresh).
+- `backend/main.py` — FastAPI app; serves both front ends and the JSON API,
+  merges Log Analytics factors with agent telemetry into DEX scores.
+- `backend/dex.py` — the scoring engine: factor definitions (bands,
+  weights, sources) and the 0-100 composite.
+- `backend/queries.py` — named KQL constants (`CONN_*`, `ERR_*`, `PERF_*`,
+  `UX_*`, `PROFILE_*`, `KPI_*`, `DEX_*`) with `{bin}`/`{HP}` placeholders.
+- `backend/azure_client.py` — `LogsQueryClient` wrapper; `run_query()` plus
+  the concurrent `run_queries()` used by the DEX endpoint.
+- `backend/connections.py` — tenant linking: device-code / service-principal
+  sign-in, ARM workspace discovery, `connection.json` persistence.
+- `backend/store.py` — SQLite store for agent samples/events + panel queries.
+- `backend/config.py` — Pydantic settings bound to `AVD_*` env vars.
+- `frontend/` — `index.html`+`app.js`+`styles.css` (classic SPA) and
+  `os.html` (AVD Ops OS shell). Vanilla JS, Chart.js via CDN, 60s refresh.
+- `agent/` — `AvdDexAgent.ps1` collector + `Install-AvdDexAgent.ps1`.
+- `docs/` — tenant onboarding runbook (served at `/runbook`).
 
 ## API endpoints
 
-All return JSON; the data endpoints take `?range=` (1h|24h|7d|30d) and `?hostpool=`.
+All return JSON; data endpoints take `?range=` (1h|24h|7d|30d) and `?hostpool=`.
 
 | Endpoint | Returns |
 |---|---|
-| `GET /` | The dashboard SPA |
-| `GET /api/meta` | Ranges, default range, whether a workspace is configured, thresholds |
-| `GET /api/hostpools` | Host pool names (from `_ResourceId`) for the filter dropdown |
-| `GET /api/overview` | KPI scalars: active users, connections, success rate, errors, affected users, avg RTT, avg profile load |
-| `GET /api/connections` | Timeseries, active users, by connection type, top users |
-| `GET /api/errors` | Error timeseries, top codes, errors by host |
-| `GET /api/hostpool` | Sessions, CPU/memory timeseries, CPU by host |
-| `GET /api/ux` | RTT, bandwidth, RTT by host, logon/connect duration |
-| `GET /api/files` | Profile-load timeseries + by host (FSLogix) |
+| `GET /` · `GET /os` · `GET /runbook` | Classic SPA · Ops OS shell · onboarding runbook |
+| `GET /api/meta` | Ranges, workspace/agent-ingest configured flags, thresholds |
+| `GET /api/hostpools` | Host pool names (from `_ResourceId`) for the filter |
+| `GET /api/dex` | Environment score + factors, score trend, ranked users/hosts, logon milestones, graphics, factor model |
+| `GET /api/dex/agent` | Agent panels: input delay (by user / over time), host resources, idle/disconnected sessions, crashes, profile loads |
+| `POST /api/agent/ingest` | Agent telemetry intake (requires `X-Agent-Key`) |
+| `GET /api/agent/status` | Agent feed health: last sample, hosts reporting |
+| `GET /api/connect/status` · `POST …/device/start` · `GET …/device/poll` · `POST …/sp` · `GET …/workspaces` · `POST …/workspace` · `POST …/disconnect` | Tenant linking (Connections app) |
+| `GET /api/overview` | KPI scalars for the strip |
+| `GET /api/connections` / `errors` / `hostpool` / `ux` / `files` | Classic panel datasets |
 
-Each data endpoint includes a `warnings` array so a missing table degrades to a banner instead of a failure.
+Each data endpoint includes a `warnings` array so a missing table degrades
+to a banner instead of a failure.
 
 ## Deploying to Azure
 
-No Dockerfile is included, but it containerizes cleanly: Python 3.10+ base, `pip install -r requirements.txt`, run `uvicorn backend.main:app --host 0.0.0.0 --port 8000`. Use a **managed identity** (grant it Log Analytics Reader) rather than a service-principal secret when hosted in Azure.
+No Dockerfile is included, but it containerizes cleanly: Python 3.10+ base,
+`pip install -r requirements.txt`, run
+`uvicorn backend.main:app --host 0.0.0.0 --port 8000`. Use a **managed
+identity** (grant it Log Analytics Reader) instead of a secret when hosted
+in Azure, and put authentication in front of the app — the `/api/connect/*`
+endpoints are unauthenticated by design for localhost use.
 
 ## Troubleshooting
 
-- **Every panel says "No data"** — check `AVD_WORKSPACE_ID` is the workspace *Customer/Workspace ID* GUID (not the resource ID), and that your identity has Log Analytics Reader.
-- **CPU / memory / profile panels empty, connections work** — `Perf` / `WVDConnectionNetworkData` / `WVDCheckpoints` aren't being collected. See the companion `avd-insite-dashboard` repo's `Enable-AvdInsights.ps1` to turn on collection.
-- **FSLogix panel empty** — checkpoint names vary by agent version; edit the `PROFILE_*` queries in `backend/queries.py` to match your `WVDCheckpoints` names.
-- **Auth errors on start** — run `az login` (or set the `AZURE_*` service-principal vars) before `run.ps1`.
+See the troubleshooting matrix in the
+[tenant onboarding runbook](docs/Tenant-Onboarding-Runbook.html) (`/runbook`).
+Quick hits:
+
+- **Every panel "No data"** — no workspace linked: use the Connections app,
+  or check `AVD_WORKSPACE_ID` is the workspace *Workspace ID* GUID (not the
+  resource ID) and the identity has Log Analytics Reader.
+- **CPU / memory / profile panels empty, connections work** — `Perf` /
+  `WVDConnectionNetworkData` / `WVDCheckpoints` aren't being collected;
+  fix the AVD Insights DCR (see `avd-insite-dashboard` repo's
+  `Enable-AvdInsights.ps1`).
+- **Agent section empty** — deploy `agent\Install-AvdDexAgent.ps1`; verify
+  `GET /api/agent/status` and that `AVD_AGENT_KEY` matches.
 
 ## Notes / tuning
 
