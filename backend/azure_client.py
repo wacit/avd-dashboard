@@ -6,12 +6,13 @@ changes.
 """
 
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 
-from azure.identity import DefaultAzureCredential
 from azure.monitor.query import LogsQueryClient, LogsQueryStatus
 
-from .config import settings
+from . import connections
+from .config import settings  # noqa: F401 - re-exported for callers
 
 # range key -> (timespan, KQL bin size used for time-series grouping)
 RANGES: dict[str, tuple[timedelta, str]] = {
@@ -22,12 +23,19 @@ RANGES: dict[str, tuple[timedelta, str]] = {
 }
 
 _client: LogsQueryClient | None = None
+_client_gen = -1
 
 
 def get_client() -> LogsQueryClient:
-    global _client
-    if _client is None:
-        _client = LogsQueryClient(DefaultAzureCredential())
+    """LogsQueryClient over the linked credential.
+
+    Rebuilt whenever the connection config changes (connections.generation
+    bumps), so linking a tenant in the UI takes effect without a restart.
+    """
+    global _client, _client_gen
+    if _client is None or _client_gen != connections.generation:
+        _client = LogsQueryClient(connections.get_credential())
+        _client_gen = connections.generation
     return _client
 
 
@@ -80,12 +88,13 @@ def run_query(
     for token, fragment in _hostpool_clauses(hostpool).items():
         query = query.replace("{" + token + "}", fragment)
 
-    if not settings.workspace_id:
-        return [], "AVD_WORKSPACE_ID is not set (see .env.example)."
+    ws = connections.workspace_id()
+    if not ws:
+        return [], "No workspace linked (use the Connections app, or set AVD_WORKSPACE_ID)."
 
     try:
         resp = get_client().query_workspace(
-            workspace_id=settings.workspace_id,
+            workspace_id=ws,
             query=query,
             timespan=span,
         )
@@ -100,3 +109,29 @@ def run_query(
         return [dict(zip(table.columns, row)) for row in table.rows], None
     except Exception as exc:  # noqa: BLE001 - surface message, never crash UI
         return [], f"{type(exc).__name__}: {exc}"
+
+
+def run_queries(
+    specs: dict[str, str], range_key: str, hostpool: str | None = None
+) -> tuple[dict[str, list[dict] | None], list[str]]:
+    """Run several named queries concurrently.
+
+    Returns (results, warnings). results maps name -> rows, or None when
+    that query failed — callers use None to drop a factor entirely rather
+    than treating "query broke" as "zero rows".
+    """
+    results: dict[str, list[dict] | None] = {}
+    warnings: list[str] = []
+    with ThreadPoolExecutor(max_workers=6) as ex:
+        futures = {
+            name: ex.submit(run_query, kql, range_key, hostpool)
+            for name, kql in specs.items()
+        }
+        for name, fut in futures.items():
+            rows, err = fut.result()
+            if err:
+                results[name] = None
+                warnings.append(f"{name}: {err}")
+            else:
+                results[name] = rows
+    return results, warnings

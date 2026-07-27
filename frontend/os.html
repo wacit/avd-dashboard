@@ -1,0 +1,974 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AVD Ops OS</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0b1120;
+  --desktop1: #0b1120;
+  --desktop2: #172554;
+  --panel: #1e293b;
+  --card: #243044;
+  --text: #e2e8f0;
+  --muted: #94a3b8;
+  --accent: #38bdf8;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  --border: #334155;
+  --track: #334155;
+  --shadow: rgba(0,0,0,.5);
+}
+[data-theme="light"] {
+  --bg: #e2e8f0;
+  --desktop1: #dbeafe;
+  --desktop2: #93c5fd;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #0284c7;
+  --ok: #059669;
+  --warn: #b45309;
+  --bad: #dc2626;
+  --border: #cbd5e1;
+  --track: #e2e8f0;
+  --shadow: rgba(15,23,42,.25);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--text);
+  background: radial-gradient(1200px 700px at 30% 20%, var(--desktop2), var(--desktop1));
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ---- desktop icons ---- */
+#icons {
+  position: absolute; top: 18px; left: 18px; bottom: 60px;
+  display: flex; flex-direction: column; flex-wrap: wrap;
+  gap: 6px; align-content: flex-start; z-index: 1;
+}
+.icon {
+  width: 92px; padding: 10px 4px; text-align: center;
+  border-radius: 8px; cursor: pointer; font-size: 12px; color: var(--text);
+}
+.icon:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.icon .glyph { font-size: 30px; line-height: 1.2; text-shadow: 0 2px 6px var(--shadow); }
+.icon .label { margin-top: 4px; word-wrap: break-word; }
+
+/* ---- windows ---- */
+.win {
+  position: absolute; min-width: 320px; min-height: 180px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 12px 40px var(--shadow);
+  display: flex; flex-direction: column;
+  resize: both; overflow: hidden;
+}
+.win.maxed { border-radius: 0; resize: none; }
+.win.minned { display: none; }
+.titlebar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; background: var(--card);
+  border-bottom: 1px solid var(--border); cursor: grab; flex: 0 0 auto;
+}
+.titlebar .t-icon { font-size: 15px; }
+.titlebar .t-title { flex: 1; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.titlebar button {
+  width: 26px; height: 22px; border: none; border-radius: 5px;
+  background: transparent; color: var(--muted); font-size: 12px; cursor: pointer;
+}
+.titlebar button:hover { background: var(--track); color: var(--text); }
+.titlebar button.close:hover { background: var(--bad); color: #fff; }
+.winbody { flex: 1; overflow: auto; padding: 12px; user-select: text; }
+
+/* ---- taskbar ---- */
+#taskbar {
+  position: fixed; left: 0; right: 0; bottom: 0; height: 46px;
+  display: flex; align-items: center; gap: 8px; padding: 0 10px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid var(--border); z-index: 5000;
+}
+#startbtn {
+  border: 1px solid var(--border); background: var(--card); color: var(--text);
+  border-radius: 8px; padding: 6px 12px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+#startbtn:hover { border-color: var(--accent); }
+#tasks { flex: 1; display: flex; gap: 6px; overflow-x: auto; }
+#tasks button {
+  border: 1px solid var(--border); background: transparent; color: var(--text);
+  border-radius: 7px; padding: 5px 10px; font-size: 12px; cursor: pointer;
+  white-space: nowrap;
+}
+#tasks button.active { background: var(--card); border-color: var(--accent); }
+#tray { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--muted); }
+#tray button { border: none; background: transparent; font-size: 15px; cursor: pointer; }
+#tray .pill {
+  border: 1px solid; border-radius: 999px; padding: 2px 10px; font-weight: 600;
+}
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--bad); border-color: var(--bad); }
+.pill.na { color: var(--muted); border-color: var(--border); }
+
+/* ---- start menu ---- */
+#startmenu {
+  position: fixed; left: 10px; bottom: 54px; width: 300px; max-height: 70vh; overflow: auto;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 16px 50px var(--shadow); padding: 10px; z-index: 6000;
+}
+#startmenu h4 { margin: 4px 8px 8px; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+#startmenu .entry {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: 8px; cursor: pointer; font-size: 13px;
+}
+#startmenu .entry:hover { background: var(--track); }
+#startmenu .entry .glyph { font-size: 18px; }
+.hidden { display: none; }
+
+/* ---- toasts ---- */
+#toasts { position: fixed; right: 14px; bottom: 60px; display: flex; flex-direction: column; gap: 8px; z-index: 7000; }
+.toast {
+  background: var(--panel); border: 1px solid var(--border); border-left: 4px solid var(--accent);
+  border-radius: 8px; padding: 10px 14px; font-size: 13px; max-width: 340px;
+  box-shadow: 0 8px 30px var(--shadow); animation: slidein .25s ease;
+}
+.toast.warn { border-left-color: var(--warn); }
+.toast.bad { border-left-color: var(--bad); }
+@keyframes slidein { from { transform: translateX(30px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+/* ---- app content bits ---- */
+.chartbox { position: relative; height: 220px; }
+.chartbox.tall { height: 300px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { text-align: left; padding: 5px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); position: sticky; top: 0; background: var(--panel); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.empty { color: var(--muted); font-size: 13px; padding: 26px 0; text-align: center; }
+.chip {
+  display: inline-block; min-width: 40px; text-align: center; padding: 1px 8px;
+  border-radius: 999px; font-weight: 600; font-size: 11.5px; border: 1px solid;
+}
+.chip.ok { color: var(--ok); border-color: var(--ok); }
+.chip.warn { color: var(--warn); border-color: var(--warn); }
+.chip.bad { color: var(--bad); border-color: var(--bad); }
+.chip.na { color: var(--muted); border-color: var(--border); }
+.gauge-wrap { position: relative; width: 190px; margin: 6px auto 0; }
+.gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+.gauge-score { font-size: 40px; font-weight: 700; line-height: 1; }
+.gauge-grade { font-size: 12px; color: var(--muted); margin-top: 3px; text-transform: uppercase; letter-spacing: .08em; }
+.gauge-score.ok { color: var(--ok); } .gauge-score.warn { color: var(--warn); } .gauge-score.bad { color: var(--bad); }
+.factors { display: flex; flex-direction: column; gap: 7px; margin-top: 12px; }
+.factor { display: grid; grid-template-columns: 150px 1fr 86px; align-items: center; gap: 8px; font-size: 12px; }
+.factor .flabel { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.factor .fbar { height: 7px; background: var(--track); border-radius: 4px; overflow: hidden; }
+.factor .fbar span { display: block; height: 100%; border-radius: 4px; }
+.factor .fval { text-align: right; font-variant-numeric: tabular-nums; }
+.note {
+  padding: 8px 12px; margin-bottom: 10px; border-radius: 7px; font-size: 12.5px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  border: 1px solid var(--accent); color: var(--accent);
+}
+h5.sect { margin: 14px 0 8px; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+h5.sect:first-child { margin-top: 0; }
+.settings label { display: block; margin: 12px 0 4px; font-size: 12px; color: var(--muted); }
+.settings select, .settings button, .settings input[type="text"], .settings input[type="password"] {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 6px 10px; font-size: 13px; width: 100%;
+}
+.settings select, .settings button { cursor: pointer; }
+.settings .row { display: flex; gap: 8px; align-items: center; }
+.devicecode {
+  text-align: center; margin: 10px 0; padding: 12px; border-radius: 8px;
+  background: var(--track); font-size: 26px; font-weight: 700; letter-spacing: .18em;
+  user-select: text;
+}
+.connstat { font-size: 13px; line-height: 1.7; }
+.connstat b { color: var(--accent); }
+details.connsec { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 8px; }
+details.connsec summary { cursor: pointer; font-size: 12.5px; color: var(--muted); }
+.about p { font-size: 13px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div id="icons"></div>
+<div id="startmenu" class="hidden"></div>
+<div id="taskbar">
+  <button id="startbtn">&#8862; AVD OS</button>
+  <div id="tasks"></div>
+  <div id="tray">
+    <span id="tray-score" class="pill na">DEX —</span>
+    <span id="tray-status">booting…</span>
+    <button id="themebtn" title="Toggle light/dark">🌓</button>
+    <span id="clock"></span>
+  </div>
+</div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+
+/* ================= state ================= */
+const state = {
+  range: "24h", hostpool: "all", auto: true,
+  data: {}, meta: {}, hostpools: [],
+  z: 10, charts: {}, lastGrade: null, timer: null,
+};
+
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+let COLORS = [];
+function applyChartTheme() {
+  COLORS = [cssVar("--accent"), cssVar("--ok"), cssVar("--warn"), cssVar("--bad"), "#a78bfa", "#fb923c"];
+  Chart.defaults.color = cssVar("--muted");
+  Chart.defaults.borderColor = cssVar("--border");
+  Chart.defaults.font.family = "Segoe UI, system-ui, sans-serif";
+}
+function setTheme(t) {
+  document.documentElement.dataset.theme = t;
+  try { localStorage.setItem("avd-os-theme", t); } catch (e) {}
+  applyChartTheme();
+  rerenderAll();
+}
+
+/* ================= helpers ================= */
+async function getJSON(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  return res.json();
+}
+async function postJSON(url, body) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  if (!res.ok) {
+    let detail = `${url} -> ${res.status}`;
+    try { detail = (await res.json()).detail || detail; } catch (e) {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+
+/* ---- tenant linking helpers ---- */
+function pollDeviceFlow(flowId) {
+  if (state.connectPoll) clearInterval(state.connectPoll);
+  state.connectPoll = setInterval(async () => {
+    try {
+      const f = await getJSON(`/api/connect/device/poll?flow_id=${flowId}`);
+      const prev = (state.connectFlow || {}).status;
+      state.connectFlow = f;
+      if (f.status === "authenticated") {
+        clearInterval(state.connectPoll);
+        state.connectPoll = null;
+        state.connect = await getJSON("/api/connect/status");
+        state.connectFlow = {};
+        toast("Tenant linked — now pick a Log Analytics workspace.", "");
+        renderApp("connect");
+      } else if (f.status === "error") {
+        clearInterval(state.connectPoll);
+        state.connectPoll = null;
+        renderApp("connect");
+      } else if (f.status !== prev) {
+        renderApp("connect");
+      }
+    } catch (e) { /* keep polling */ }
+  }, 2000);
+}
+async function loadWorkspaces() {
+  const sel = document.getElementById("cn_ws");
+  if (!sel) return;
+  sel.innerHTML = '<option value="">Loading workspaces…</option>';
+  try {
+    const r = await getJSON("/api/connect/workspaces");
+    const ws = r.workspaces || [];
+    if (!ws.length) {
+      sel.innerHTML = '<option value="">No workspaces visible to this identity</option>';
+      return;
+    }
+    const cur = (state.connect || {}).workspace_id;
+    sel.innerHTML = '<option value="">Select a workspace…</option>' + ws.map((w) =>
+      `<option value="${w.customer_id}" data-name="${w.name}" ${w.customer_id === cur ? "selected" : ""}>
+        ${w.subscription} / ${w.resource_group} / ${w.name}</option>`).join("");
+  } catch (e) {
+    sel.innerHTML = `<option value="">${e.message}</option>`;
+  }
+}
+const fmt = (v, d = 1) => (v == null ? "—" : Number(v).toFixed(d).replace(/\.0$/, ""));
+function fmtTime(iso) {
+  const d = new Date(iso);
+  if (state.range === "7d" || state.range === "30d")
+    return d.toLocaleDateString([], { month: "short", day: "numeric" });
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+function sevOf(score) {
+  if (score == null) return "na";
+  if (score >= 80) return "ok";
+  if (score >= 60) return "warn";
+  return "bad";
+}
+const chip = (s) => `<span class="chip ${sevOf(s)}">${s == null ? "—" : s}</span>`;
+
+function destroyCharts(winId) {
+  for (const k of Object.keys(state.charts)) {
+    if (k.startsWith(winId + ":")) { state.charts[k].destroy(); delete state.charts[k]; }
+  }
+}
+function mkChart(winId, canvas, cfg) {
+  const key = winId + ":" + canvas.id;
+  if (state.charts[key]) state.charts[key].destroy();
+  state.charts[key] = new Chart(canvas, cfg);
+}
+function lineCfg(rows, xKey, series, opts = {}) {
+  const scales = { y: { beginAtZero: true } };
+  if (series.some((s) => s.y2)) scales.y2 = { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } };
+  if (opts.yMax != null) scales.y.max = opts.yMax;
+  return {
+    type: "line",
+    data: {
+      labels: rows.map((r) => fmtTime(r[xKey])),
+      datasets: series.map((s, i) => ({
+        label: s.label, data: rows.map((r) => r[s.key]),
+        borderColor: COLORS[i % COLORS.length], backgroundColor: COLORS[i % COLORS.length] + "33",
+        fill: s.fill || false, tension: .3, pointRadius: 0, borderWidth: 2,
+        yAxisID: s.y2 ? "y2" : "y",
+      })),
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      interaction: { mode: "index", intersect: false },
+      plugins: { legend: { display: series.length > 1 } }, scales },
+  };
+}
+function barCfg(rows, labelKey, series) {
+  return {
+    type: "bar",
+    data: {
+      labels: rows.map((r) => String(r[labelKey] ?? "—")),
+      datasets: series.map((s, i) => ({
+        label: s.label, data: rows.map((r) => r[s.key]),
+        backgroundColor: COLORS[i % COLORS.length] + "aa",
+        borderColor: COLORS[i % COLORS.length], borderWidth: 1,
+      })),
+    },
+    options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: series.length > 1 } },
+      scales: { x: { beginAtZero: true } } },
+  };
+}
+function chartBox(id, tall) {
+  return `<div class="chartbox${tall ? " tall" : ""}"><canvas id="${id}"></canvas></div>`;
+}
+function drawOrEmpty(winId, el, canvasId, rows, cfgFn) {
+  const cv = el.querySelector("#" + canvasId);
+  if (!cv) return;
+  if (!rows || rows.length === 0) {
+    cv.closest(".chartbox").innerHTML = '<div class="empty">No data for this range</div>';
+    return;
+  }
+  mkChart(winId, cv, cfgFn(rows));
+}
+function tableHTML(rows, cols) {
+  if (!rows || rows.length === 0) return '<div class="empty">No data for this range</div>';
+  const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${c.label}</th>`).join("");
+  const body = rows.map((r) =>
+    "<tr>" + cols.map((c) => `<td class="${c.num ? "num" : ""}">${(c.fmt ? c.fmt(r[c.key], r) : r[c.key]) ?? "—"}</td>`).join("") + "</tr>"
+  ).join("");
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/* ================= apps ================= */
+const APPS = {
+  dex: {
+    title: "Experience Score", icon: "🎯", w: 380, h: 560,
+    render(el, id) {
+      const env = (state.data.dex || {}).environment;
+      const score = env && env.score;
+      el.innerHTML =
+        `<div class="gauge-wrap"><canvas id="g_${id}"></canvas>
+           <div class="gauge-center"><div class="gauge-score ${sevOf(score)}">${score == null ? "—" : score}</div>
+           <div class="gauge-grade">${env ? env.grade : ""}</div></div></div>
+         <div class="factors">` +
+        ((env && env.factors) || []).map((f) => {
+          const s = sevOf(f.score);
+          return `<div class="factor"><div class="flabel" title="weight ${f.weight}">${f.label}</div>
+            <div class="fbar"><span style="width:${f.score}%;background:var(--${s === "na" ? "muted" : s})"></span></div>
+            <div class="fval">${f.value}${f.unit}</div></div>`;
+        }).join("") + `</div>`;
+      const cv = el.querySelector("#g_" + id);
+      const val = score == null ? 0 : score;
+      mkChart(id, cv, {
+        type: "doughnut",
+        data: { datasets: [{ data: [val, 100 - val],
+          backgroundColor: [cssVar("--" + (sevOf(score) === "na" ? "muted" : sevOf(score))), cssVar("--track")],
+          borderWidth: 0 }] },
+        options: { cutout: "78%", rotation: -135, circumference: 270, responsive: true,
+          maintainAspectRatio: true, plugins: { legend: { display: false }, tooltip: { enabled: false } } },
+      });
+    },
+  },
+  trend: {
+    title: "Score Trend", icon: "📈", w: 560, h: 330,
+    render(el, id) {
+      el.innerHTML = chartBox("c_" + id, true);
+      drawOrEmpty(id, el, "c_" + id, (state.data.dex || {}).trend,
+        (rows) => lineCfg(rows, "TimeGenerated", [{ key: "Score", label: "Score", fill: true }], { yMax: 100 }));
+    },
+  },
+  users: {
+    title: "User Experience", icon: "👥", w: 720, h: 420,
+    render(el) {
+      el.innerHTML = tableHTML((state.data.dex || {}).users, [
+        { key: "name", label: "User" },
+        { key: "score", label: "Score", num: true, fmt: (v) => chip(v) },
+        { key: "sessions", label: "Sessions", num: true },
+        { key: "logon_sec", label: "Logon s", num: true, fmt: (v) => fmt(v) },
+        { key: "rtt_ms", label: "RTT ms", num: true, fmt: (v) => fmt(v) },
+        { key: "errors", label: "Errors", num: true },
+        { key: "short_session_pct", label: "Short %", num: true, fmt: (v) => fmt(v) },
+        { key: "profile_sec", label: "Profile s", num: true, fmt: (v) => fmt(v) },
+        { key: "input_delay_ms", label: "Input ms", num: true, fmt: (v) => fmt(v) },
+      ]);
+    },
+  },
+  hosts: {
+    title: "Host Experience", icon: "🖥️", w: 720, h: 420,
+    render(el) {
+      el.innerHTML = tableHTML((state.data.dex || {}).hosts, [
+        { key: "name", label: "Session host" },
+        { key: "score", label: "Score", num: true, fmt: (v) => chip(v) },
+        { key: "sessions", label: "Sessions", num: true },
+        { key: "logon_sec", label: "Logon s", num: true, fmt: (v) => fmt(v) },
+        { key: "rtt_ms", label: "RTT ms", num: true, fmt: (v) => fmt(v) },
+        { key: "errors", label: "Errors", num: true },
+        { key: "short_session_pct", label: "Short %", num: true, fmt: (v) => fmt(v) },
+        { key: "profile_sec", label: "Profile s", num: true, fmt: (v) => fmt(v) },
+      ]);
+    },
+  },
+  logon: {
+    title: "Logon Waterfall", icon: "⏱️", w: 560, h: 380,
+    render(el, id) {
+      el.innerHTML = chartBox("c_" + id, true);
+      drawOrEmpty(id, el, "c_" + id, (state.data.dex || {}).logon_phases,
+        (rows) => barCfg(rows, "Name", [{ key: "AvgSec", label: "Avg s" }, { key: "P95Sec", label: "P95 s" }]));
+    },
+  },
+  agent: {
+    title: "Agent Telemetry", icon: "🛰️", w: 700, h: 560,
+    render(el, id) {
+      const a = state.data.dexagent || {};
+      const st = a.status || {};
+      const note = st.available
+        ? `DEX agent feed: ${st.hosts_reporting} host(s) reporting · last sample ${st.last_sample ? new Date(st.last_sample).toLocaleString() : "?"}`
+        : "No DEX agent telemetry yet — deploy agent\\Install-AvdDexAgent.ps1 to your session hosts.";
+      el.innerHTML =
+        `<div class="note">${note}</div>
+         <h5 class="sect">Input delay by user (ms)</h5>${chartBox("ci_" + id)}
+         <h5 class="sect">Host resources</h5><div id="th_${id}"></div>
+         <h5 class="sect">Disconnected / long-idle sessions</h5><div id="ti_${id}"></div>
+         <h5 class="sect">App crashes &amp; hangs</h5><div id="tc_${id}"></div>`;
+      drawOrEmpty(id, el, "ci_" + id, a.input_delay_by_user,
+        (rows) => barCfg(rows, "User", [{ key: "AvgInputDelayMs", label: "Avg ms" }, { key: "MaxInputDelayMs", label: "Max ms" }]));
+      el.querySelector("#th_" + id).innerHTML = tableHTML(a.host_resources, [
+        { key: "Host", label: "Host" }, { key: "AvgCpuPct", label: "CPU %", num: true },
+        { key: "MinMemFreeMb", label: "Free MB", num: true }, { key: "AvgRttMs", label: "RTT ms", num: true },
+        { key: "AvgLossPct", label: "Loss %", num: true }, { key: "AvgFps", label: "FPS", num: true },
+        { key: "UdpPct", label: "UDP %", num: true },
+      ]);
+      el.querySelector("#ti_" + id).innerHTML = tableHTML(a.idle_sessions, [
+        { key: "User", label: "User" }, { key: "Host", label: "Host" }, { key: "State", label: "State" },
+        { key: "IdleMin", label: "Idle min", num: true }, { key: "MemMb", label: "Mem MB", num: true },
+      ]);
+      el.querySelector("#tc_" + id).innerHTML = tableHTML(a.crashes, [
+        { key: "App", label: "Application" }, { key: "Kind", label: "Kind" },
+        { key: "Count", label: "Count", num: true },
+      ]);
+    },
+  },
+  network: {
+    title: "Network & Graphics", icon: "📡", w: 620, h: 560,
+    render(el, id) {
+      const ux = state.data.ux || {};
+      el.innerHTML =
+        `<h5 class="sect">Round-trip time (ms)</h5>${chartBox("cr_" + id)}
+         <h5 class="sect">Bandwidth (KBps)</h5>${chartBox("cb_" + id)}
+         <h5 class="sect">Graphics — FPS &amp; end-to-end delay</h5>${chartBox("cg_" + id)}`;
+      drawOrEmpty(id, el, "cr_" + id, ux.rtt,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgRTT", label: "Avg" }, { key: "P95RTT", label: "P95" }]));
+      drawOrEmpty(id, el, "cb_" + id, ux.bandwidth,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgKBps", label: "KBps", fill: true }]));
+      drawOrEmpty(id, el, "cg_" + id, (state.data.dex || {}).graphics,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgFps", label: "FPS" }, { key: "AvgE2EMs", label: "E2E ms", y2: true }]));
+    },
+  },
+  connections: {
+    title: "Connections", icon: "🔌", w: 620, h: 560,
+    render(el, id) {
+      const c = state.data.conn || {};
+      el.innerHTML =
+        `<h5 class="sect">Attempts vs connected</h5>${chartBox("ca_" + id)}
+         <h5 class="sect">Active users</h5>${chartBox("cu_" + id)}
+         <h5 class="sect">Logon / connect time (s)</h5>${chartBox("cl_" + id)}`;
+      drawOrEmpty(id, el, "ca_" + id, c.timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "Started", label: "Attempts" }, { key: "Connected", label: "Connected" }]));
+      drawOrEmpty(id, el, "cu_" + id, c.active_users,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "Users", label: "Users", fill: true }]));
+      drawOrEmpty(id, el, "cl_" + id, (state.data.ux || {}).logon_duration,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgConnectSec", label: "Avg s" }, { key: "P95ConnectSec", label: "P95 s" }]));
+    },
+  },
+  errors: {
+    title: "Errors", icon: "⚠️", w: 600, h: 540,
+    render(el, id) {
+      const e = state.data.err || {};
+      el.innerHTML =
+        `<h5 class="sect">Errors over time</h5>${chartBox("ce_" + id)}
+         <h5 class="sect">Top error codes</h5>${chartBox("cc_" + id, true)}`;
+      drawOrEmpty(id, el, "ce_" + id, e.timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "Errors", label: "Errors", fill: true }]));
+      drawOrEmpty(id, el, "cc_" + id, e.top_codes,
+        (r) => barCfg(r, "CodeSymbolic", [{ key: "Count", label: "Count" }]));
+    },
+  },
+  hostperf: {
+    title: "Host Performance", icon: "⚙️", w: 640, h: 560,
+    render(el, id) {
+      const h = state.data.host || {};
+      el.innerHTML =
+        `<h5 class="sect">Avg CPU %</h5>${chartBox("cp_" + id)}
+         <h5 class="sect">Available memory (MB)</h5>${chartBox("cm_" + id)}
+         <h5 class="sect">Sessions by host</h5><div id="ts_${id}"></div>`;
+      drawOrEmpty(id, el, "cp_" + id, h.cpu_timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgCPU", label: "CPU %", fill: true }]));
+      drawOrEmpty(id, el, "cm_" + id, h.mem_timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgAvailMB", label: "MB", fill: true }]));
+      el.querySelector("#ts_" + id).innerHTML = tableHTML(h.sessions, [
+        { key: "SessionHostName", label: "Host" },
+        { key: "Sessions", label: "Sessions", num: true },
+        { key: "Users", label: "Users", num: true },
+      ]);
+    },
+  },
+  profile: {
+    title: "FSLogix Profiles", icon: "📁", w: 600, h: 540,
+    render(el, id) {
+      const f = state.data.files || {};
+      el.innerHTML =
+        `<h5 class="sect">Profile load time (s)</h5>${chartBox("cf_" + id)}
+         <h5 class="sect">Profile load by host (s)</h5>${chartBox("ch_" + id, true)}`;
+      drawOrEmpty(id, el, "cf_" + id, f.profile_timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgProfileSec", label: "Avg s" }, { key: "P95ProfileSec", label: "P95 s" }]));
+      drawOrEmpty(id, el, "ch_" + id, f.profile_by_host,
+        (r) => barCfg(r, "SessionHostName", [{ key: "AvgProfileSec", label: "Avg s" }]));
+    },
+  },
+  connect: {
+    title: "Connections", icon: "🔗", w: 420, h: 560,
+    render(el, id) {
+      const c = state.connect || {};
+      const flow = state.connectFlow || {};
+      const modeLabel = { device: "Linked tenant (device sign-in)",
+        sp: "Service principal", env: ".env / DefaultAzureCredential", none: "Not connected" };
+      let html = `<div class="connstat">
+        <div>Status: <b>${modeLabel[c.mode] || c.mode || "…"}</b></div>
+        ${c.account ? `<div>Account: <b>${c.account}</b></div>` : ""}
+        ${c.tenant_id ? `<div>Tenant: <b>${c.tenant_id}</b></div>` : ""}
+        <div>Workspace: <b>${c.workspace_name || c.workspace_id || "none"}</b></div>
+      </div>`;
+
+      if (flow.status === "pending") {
+        html += `<h5 class="sect">Finish sign-in</h5>
+          <p style="font-size:13px">Go to
+            <a href="${flow.verification_uri}" target="_blank" style="color:var(--accent)">${flow.verification_uri}</a>
+            and enter this code:</p>
+          <div class="devicecode">${flow.user_code}</div>
+          <div class="empty" style="padding:6px 0">Waiting for you to finish signing in…</div>`;
+      } else if (flow.status === "starting") {
+        html += `<div class="empty">Requesting device code…</div>`;
+      } else {
+        html += `<div class="settings">
+          <h5 class="sect" style="margin-top:14px">Link your tenant</h5>
+          <label>Tenant ID (optional — blank = any organization)</label>
+          <input type="text" id="cn_tenant" placeholder="00000000-0000-0000-0000-000000000000" />
+          <label></label>
+          <button id="cn_device">Sign in with device code</button>
+          <details class="connsec"><summary>Use a service principal instead</summary>
+            <label>Tenant ID</label><input type="text" id="cn_sp_tenant" />
+            <label>Client ID</label><input type="text" id="cn_sp_client" />
+            <label>Client secret</label><input type="password" id="cn_sp_secret" />
+            <label></label><button id="cn_sp">Connect service principal</button>
+            <p style="font-size:11.5px;color:var(--muted)">Needs Log Analytics Reader on the
+            workspace (plus Reader to list workspaces). The secret is stored in
+            connection.json on this machine.</p>
+          </details>
+        </div>`;
+      }
+
+      if (flow.status === "error") {
+        html += `<div class="note" style="border-color:var(--bad);color:var(--bad);background:color-mix(in srgb,var(--bad) 10%, var(--panel))">${flow.error}</div>`;
+      }
+
+      // workspace picker once we have a signed-in identity
+      if ((c.mode === "device" || c.mode === "sp") && flow.status !== "pending") {
+        html += `<div class="settings"><h5 class="sect">Workspace</h5>
+          <div class="row">
+            <select id="cn_ws"><option value="">Loading workspaces…</option></select>
+          </div>
+          <label></label>
+          <div class="row">
+            <button id="cn_ws_save">Use selected workspace</button>
+            <button id="cn_ws_reload" style="width:auto">↻</button>
+          </div></div>`;
+      }
+      if (c.mode === "device" || c.mode === "sp") {
+        html += `<div class="settings"><label></label><button id="cn_disc">Disconnect</button></div>`;
+      }
+      el.innerHTML = html;
+
+      const on = (sel, fn) => { const b = el.querySelector(sel); if (b) b.addEventListener("click", fn); };
+      on("#cn_device", async () => {
+        const tenant = el.querySelector("#cn_tenant").value.trim();
+        state.connectFlow = { status: "starting" };
+        renderApp("connect");
+        try {
+          const r = await postJSON("/api/connect/device/start", tenant ? { tenant_id: tenant } : {});
+          pollDeviceFlow(r.flow_id);
+        } catch (e) {
+          state.connectFlow = { status: "error", error: e.message };
+          renderApp("connect");
+        }
+      });
+      on("#cn_sp", async () => {
+        try {
+          state.connect = await postJSON("/api/connect/sp", {
+            tenant_id: el.querySelector("#cn_sp_tenant").value.trim(),
+            client_id: el.querySelector("#cn_sp_client").value.trim(),
+            client_secret: el.querySelector("#cn_sp_secret").value,
+          });
+          state.connectFlow = {};
+          toast("Service principal connected — pick a workspace.", "");
+          renderApp("connect");
+          loadWorkspaces();
+        } catch (e) { toast(e.message, "bad"); }
+      });
+      on("#cn_ws_save", async () => {
+        const sel = el.querySelector("#cn_ws");
+        const opt = sel.options[sel.selectedIndex];
+        if (!opt || !opt.value) { toast("Pick a workspace first.", "warn"); return; }
+        state.connect = await postJSON("/api/connect/workspace",
+          { workspace_id: opt.value, name: opt.dataset.name });
+        toast(`Workspace linked: ${opt.dataset.name}. Loading data…`, "");
+        renderApp("connect");
+        refresh();
+      });
+      on("#cn_ws_reload", loadWorkspaces);
+      on("#cn_disc", async () => {
+        state.connect = await postJSON("/api/connect/disconnect", {});
+        state.connectFlow = {};
+        toast("Disconnected — back to .env / DefaultAzureCredential.", "warn");
+        renderApp("connect");
+      });
+
+      if (el.querySelector("#cn_ws")) loadWorkspaces();
+    },
+  },
+  settings: {
+    title: "Settings", icon: "🛠️", w: 340, h: 420,
+    render(el) {
+      el.innerHTML = `<div class="settings">
+        <label>Time range</label>
+        <select id="s_range">
+          ${["1h", "24h", "7d", "30d"].map((r) =>
+            `<option value="${r}" ${r === state.range ? "selected" : ""}>${r}</option>`).join("")}
+        </select>
+        <label>Host pool</label>
+        <select id="s_hp">
+          <option value="all">All host pools</option>
+          ${state.hostpools.map((n) =>
+            `<option value="${n}" ${n === state.hostpool ? "selected" : ""}>${n}</option>`).join("")}
+        </select>
+        <label>Auto refresh</label>
+        <div class="row"><input type="checkbox" id="s_auto" ${state.auto ? "checked" : ""} style="width:auto" /> <span style="font-size:13px">every 60 s</span></div>
+        <label>Theme</label>
+        <button id="s_theme">Toggle light / dark</button>
+        <label>Classic dashboard</label>
+        <button id="s_classic">Open single-page view</button>
+        <label>Documentation</label>
+        <button id="s_runbook">Tenant onboarding runbook</button>
+      </div>`;
+      el.querySelector("#s_range").addEventListener("change", (e) => { state.range = e.target.value; refresh(); });
+      el.querySelector("#s_hp").addEventListener("change", (e) => { state.hostpool = e.target.value; refresh(); });
+      el.querySelector("#s_auto").addEventListener("change", (e) => { state.auto = e.target.checked; setupAuto(); });
+      el.querySelector("#s_theme").addEventListener("click", () =>
+        setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"));
+      el.querySelector("#s_classic").addEventListener("click", () => window.open("/", "_blank"));
+      el.querySelector("#s_runbook").addEventListener("click", () => window.open("/runbook", "_blank"));
+    },
+  },
+  about: {
+    title: "About AVD OS", icon: "ℹ️", w: 430, h: 420,
+    render(el) {
+      const fm = (state.data.dex || {}).factor_model || [];
+      el.innerHTML = `<div class="about">
+        <p><b>AVD Ops OS</b> — a browser-desktop take on the AVD DEX dashboard.
+        Every window is an app over the same FastAPI backend: Log Analytics
+        (AVD Insights tables) plus the in-session DEX agent feed.</p>
+        <p>The experience score is a weighted 0–100 composite
+        (eG Innovations / RDPSoft-style). Factors currently modeled:</p>
+        ${tableHTML(fm, [
+          { key: "label", label: "Factor" },
+          { key: "weight", label: "Weight", num: true },
+          { key: "source", label: "Source" },
+        ])}
+      </div>`;
+    },
+  },
+};
+
+/* ================= window manager ================= */
+const wins = {}; // id -> {el, body, minned, maxed, prev}
+function layoutStore() {
+  try { return JSON.parse(localStorage.getItem("avd-os-layout") || "{}"); } catch (e) { return {}; }
+}
+function saveLayout() {
+  const out = {};
+  for (const [id, w] of Object.entries(wins)) {
+    out[id] = { x: w.el.offsetLeft, y: w.el.offsetTop, w: w.el.offsetWidth, h: w.el.offsetHeight, min: w.minned };
+  }
+  try { localStorage.setItem("avd-os-layout", JSON.stringify(out)); } catch (e) {}
+}
+function focusWin(id) {
+  const w = wins[id];
+  if (!w) return;
+  w.el.style.zIndex = ++state.z;
+  renderTaskbar();
+}
+function openApp(id) {
+  if (wins[id]) {
+    wins[id].minned = false;
+    wins[id].el.classList.remove("minned");
+    focusWin(id);
+    renderApp(id);
+    return;
+  }
+  const app = APPS[id];
+  const saved = layoutStore()[id] || {};
+  const el = document.createElement("div");
+  el.className = "win";
+  const x = saved.x ?? (60 + (Object.keys(wins).length % 6) * 44);
+  const y = saved.y ?? (40 + (Object.keys(wins).length % 6) * 36);
+  el.style.left = Math.max(0, Math.min(x, innerWidth - 340)) + "px";
+  el.style.top = Math.max(0, Math.min(y, innerHeight - 220)) + "px";
+  el.style.width = (saved.w ?? app.w) + "px";
+  el.style.height = (saved.h ?? app.h) + "px";
+  el.innerHTML = `
+    <div class="titlebar">
+      <span class="t-icon">${app.icon}</span><span class="t-title">${app.title}</span>
+      <button class="min" title="Minimize">–</button>
+      <button class="max" title="Maximize">□</button>
+      <button class="close" title="Close">✕</button>
+    </div>
+    <div class="winbody"></div>`;
+  document.body.appendChild(el);
+  const w = wins[id] = { el, body: el.querySelector(".winbody"), minned: false, maxed: false, prev: null };
+
+  el.addEventListener("pointerdown", () => focusWin(id));
+  el.querySelector(".close").addEventListener("click", () => closeApp(id));
+  el.querySelector(".min").addEventListener("click", () => {
+    w.minned = true; el.classList.add("minned"); renderTaskbar(); saveLayout();
+  });
+  el.querySelector(".max").addEventListener("click", () => toggleMax(id));
+
+  // drag via titlebar
+  const tb = el.querySelector(".titlebar");
+  tb.addEventListener("pointerdown", (ev) => {
+    if (ev.target.tagName === "BUTTON" || w.maxed) return;
+    const sx = ev.clientX - el.offsetLeft, sy = ev.clientY - el.offsetTop;
+    const move = (e) => {
+      el.style.left = Math.max(-el.offsetWidth + 80, Math.min(e.clientX - sx, innerWidth - 60)) + "px";
+      el.style.top = Math.max(0, Math.min(e.clientY - sy, innerHeight - 80)) + "px";
+    };
+    const up = () => {
+      removeEventListener("pointermove", move); removeEventListener("pointerup", up); saveLayout();
+    };
+    addEventListener("pointermove", move); addEventListener("pointerup", up);
+  });
+  tb.addEventListener("dblclick", (ev) => { if (ev.target.tagName !== "BUTTON") toggleMax(id); });
+  new ResizeObserver(() => saveLayout()).observe(el);
+
+  focusWin(id);
+  renderApp(id);
+  renderTaskbar();
+  saveLayout();
+}
+function toggleMax(id) {
+  const w = wins[id];
+  if (!w.maxed) {
+    w.prev = { l: w.el.style.left, t: w.el.style.top, w: w.el.style.width, h: w.el.style.height };
+    Object.assign(w.el.style, { left: "0px", top: "0px", width: "100vw", height: (innerHeight - 46) + "px" });
+    w.el.classList.add("maxed");
+  } else {
+    Object.assign(w.el.style, { left: w.prev.l, top: w.prev.t, width: w.prev.w, height: w.prev.h });
+    w.el.classList.remove("maxed");
+  }
+  w.maxed = !w.maxed;
+  renderApp(id);
+}
+function closeApp(id) {
+  destroyCharts(id);
+  wins[id].el.remove();
+  delete wins[id];
+  renderTaskbar();
+  const layout = layoutStore();
+  delete layout[id];
+  try { localStorage.setItem("avd-os-layout", JSON.stringify(layout)); } catch (e) {}
+}
+function renderApp(id) {
+  const w = wins[id];
+  if (!w || w.minned) return;
+  destroyCharts(id);
+  APPS[id].render(w.body, id);
+}
+function rerenderAll() { Object.keys(wins).forEach(renderApp); }
+
+/* ================= shell chrome ================= */
+function renderTaskbar() {
+  const el = document.getElementById("tasks");
+  el.innerHTML = "";
+  for (const [id, w] of Object.entries(wins)) {
+    const b = document.createElement("button");
+    b.textContent = `${APPS[id].icon} ${APPS[id].title}`;
+    b.className = w.minned ? "" : "active";
+    b.addEventListener("click", () => {
+      if (w.minned) { w.minned = false; w.el.classList.remove("minned"); focusWin(id); renderApp(id); }
+      else if (parseInt(w.el.style.zIndex || 0) === state.z) {
+        w.minned = true; w.el.classList.add("minned");
+      } else focusWin(id);
+      renderTaskbar(); saveLayout();
+    });
+    el.appendChild(b);
+  }
+}
+function renderIcons() {
+  const el = document.getElementById("icons");
+  el.innerHTML = "";
+  for (const [id, app] of Object.entries(APPS)) {
+    const d = document.createElement("div");
+    d.className = "icon";
+    d.innerHTML = `<div class="glyph">${app.icon}</div><div class="label">${app.title}</div>`;
+    d.addEventListener("dblclick", () => openApp(id));
+    el.appendChild(d);
+  }
+}
+function renderStartMenu() {
+  const m = document.getElementById("startmenu");
+  m.innerHTML = "<h4>AVD Ops OS</h4>" + Object.entries(APPS).map(([id, a]) =>
+    `<div class="entry" data-app="${id}"><span class="glyph">${a.icon}</span>${a.title}</div>`).join("");
+  m.querySelectorAll(".entry").forEach((e) =>
+    e.addEventListener("click", () => { openApp(e.dataset.app); m.classList.add("hidden"); }));
+}
+function toast(msg, sev) {
+  const t = document.createElement("div");
+  t.className = "toast " + (sev || "");
+  t.textContent = msg;
+  document.getElementById("toasts").appendChild(t);
+  setTimeout(() => t.remove(), 8000);
+}
+
+/* ================= data loop ================= */
+async function refresh() {
+  const tray = document.getElementById("tray-status");
+  tray.textContent = "refreshing…";
+  const qs = `range=${state.range}&hostpool=${encodeURIComponent(state.hostpool)}`;
+  const endpoints = {
+    dex: `/api/dex?${qs}`, dexagent: `/api/dex/agent?${qs}`,
+    conn: `/api/connections?${qs}`, err: `/api/errors?${qs}`,
+    host: `/api/hostpool?${qs}`, ux: `/api/ux?${qs}`, files: `/api/files?${qs}`,
+  };
+  const keys = Object.keys(endpoints);
+  const results = await Promise.allSettled(keys.map((k) => getJSON(endpoints[k])));
+  keys.forEach((k, i) => {
+    if (results[i].status === "fulfilled") state.data[k] = results[i].value;
+  });
+  const failed = keys.filter((_, i) => results[i].status === "rejected");
+
+  // tray DEX pill + grade-change toast
+  const env = (state.data.dex || {}).environment || {};
+  const pill = document.getElementById("tray-score");
+  pill.className = "pill " + sevOf(env.score);
+  pill.textContent = "DEX " + (env.score == null ? "—" : env.score);
+  if (env.grade && state.lastGrade && env.grade !== state.lastGrade)
+    toast(`Experience grade changed: ${state.lastGrade} → ${env.grade}`,
+      sevOf(env.score) === "ok" ? "" : sevOf(env.score));
+  state.lastGrade = env.grade || state.lastGrade;
+
+  rerenderAll();
+  tray.textContent = (failed.length ? `${failed.length} feed(s) failed · ` : "") +
+    "updated " + new Date().toLocaleTimeString();
+}
+function setupAuto() {
+  if (state.timer) clearInterval(state.timer);
+  if (state.auto) state.timer = setInterval(refresh, 60000);
+}
+
+/* ================= boot ================= */
+document.getElementById("startbtn").addEventListener("click", () =>
+  document.getElementById("startmenu").classList.toggle("hidden"));
+document.addEventListener("click", (e) => {
+  const m = document.getElementById("startmenu");
+  if (!m.classList.contains("hidden") &&
+      !m.contains(e.target) && e.target.id !== "startbtn") m.classList.add("hidden");
+});
+document.getElementById("themebtn").addEventListener("click", () =>
+  setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"));
+setInterval(() => {
+  document.getElementById("clock").textContent =
+    new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}, 1000);
+
+(async function boot() {
+  let theme = "dark";
+  try { theme = localStorage.getItem("avd-os-theme") || "dark"; } catch (e) {}
+  document.documentElement.dataset.theme = theme;
+  applyChartTheme();
+  renderIcons();
+  renderStartMenu();
+
+  try {
+    state.meta = await getJSON("/api/meta");
+    state.connect = await getJSON("/api/connect/status");
+    if (!state.meta.workspace_configured) {
+      toast("No workspace linked — open the Connections app to link your tenant.", "warn");
+      openApp("connect");
+    }
+  } catch (e) {}
+  try {
+    const hp = await getJSON("/api/hostpools");
+    state.hostpools = hp.hostpools || [];
+  } catch (e) {}
+
+  // restore layout or open the default workspace
+  const saved = layoutStore();
+  const toOpen = Object.keys(saved).filter((id) => APPS[id]);
+  (toOpen.length ? toOpen : ["dex", "trend", "users"]).forEach(openApp);
+  for (const [id, s] of Object.entries(saved)) {
+    if (wins[id] && s.min) { wins[id].minned = true; wins[id].el.classList.add("minned"); }
+  }
+  renderTaskbar();
+
+  await refresh();
+  setupAuto();
+})();
+
+// debug hook (capy-os convention)
+window.__os = { state, wins, openApp, closeApp, refresh, APPS };
+</script>
+</body>
+</html>

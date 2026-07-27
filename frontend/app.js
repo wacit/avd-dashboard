@@ -5,10 +5,19 @@ let autoTimer = null;
 let thresholds = {};
 let lastData = {}; // dataset key -> rows, for CSV export
 
-const COLORS = ["#38bdf8", "#34d399", "#fbbf24", "#f87171", "#a78bfa", "#fb923c"];
-
 // label -> {section, key} for the export dropdown
 const DATASETS = {
+  "DEX — users ranked by score": ["dex", "users"],
+  "DEX — hosts ranked by score": ["dex", "hosts"],
+  "DEX — score trend": ["dex", "trend"],
+  "DEX — logon milestones": ["dex", "logon_phases"],
+  "DEX — graphics quality": ["dex", "graphics"],
+  "Agent — input delay by user": ["dexagent", "input_delay_by_user"],
+  "Agent — input delay over time": ["dexagent", "input_delay_timeseries"],
+  "Agent — host resources": ["dexagent", "host_resources"],
+  "Agent — idle/disconnected sessions": ["dexagent", "idle_sessions"],
+  "Agent — app crashes": ["dexagent", "crashes"],
+  "Agent — profile loads": ["dexagent", "profile_loads"],
   "Connections — over time": ["connections", "timeseries"],
   "Connections — active users": ["connections", "active_users"],
   "Connections — by type": ["connections", "by_type"],
@@ -20,6 +29,7 @@ const DATASETS = {
   "Host pool — CPU over time": ["hostpool", "cpu_timeseries"],
   "Host pool — memory over time": ["hostpool", "mem_timeseries"],
   "Host pool — CPU by host": ["hostpool", "cpu_by_host"],
+  "Host pool — AVD agent health": ["hostpool", "agent_health"],
   "UX — RTT over time": ["ux", "rtt"],
   "UX — bandwidth over time": ["ux", "bandwidth"],
   "UX — logon duration": ["ux", "logon_duration"],
@@ -28,9 +38,27 @@ const DATASETS = {
   "Profile — load by host": ["files", "profile_by_host"],
 };
 
-Chart.defaults.color = "#94a3b8";
-Chart.defaults.borderColor = "#334155";
-Chart.defaults.font.family = "Segoe UI, system-ui, sans-serif";
+// ---- theming ----
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+let COLORS = [];
+function applyChartTheme() {
+  COLORS = [cssVar("--accent"), cssVar("--ok"), cssVar("--warn"), cssVar("--bad"), "#a78bfa", "#fb923c"];
+  Chart.defaults.color = cssVar("--muted");
+  Chart.defaults.borderColor = cssVar("--border");
+  Chart.defaults.font.family = "Segoe UI, system-ui, sans-serif";
+}
+function setTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  try { localStorage.setItem("avd-theme", theme); } catch (e) { /* ignore */ }
+  applyChartTheme();
+}
+function toggleTheme() {
+  const cur = document.documentElement.dataset.theme === "light" ? "light" : "dark";
+  setTheme(cur === "light" ? "dark" : "light");
+  load();
+}
 
 function rangeVal() { return document.getElementById("range").value; }
 function hostpoolVal() { return document.getElementById("hostpool").value || "all"; }
@@ -52,13 +80,13 @@ function noData(canvasId) {
   destroy(canvasId);
   const ctx = cv.getContext("2d");
   ctx.clearRect(0, 0, cv.width, cv.height);
-  ctx.fillStyle = "#64748b";
+  ctx.fillStyle = cssVar("--muted");
   ctx.font = "13px Segoe UI";
   ctx.textAlign = "center";
   ctx.fillText("No data for this range", cv.width / 2, 40);
 }
 
-function lineChart(id, rows, xKey, series, range) {
+function lineChart(id, rows, xKey, series, range, opts = {}) {
   destroy(id);
   if (!rows || rows.length === 0) return noData(id);
   const labels = rows.map((r) => fmtTime(r[xKey], range));
@@ -71,7 +99,13 @@ function lineChart(id, rows, xKey, series, range) {
     tension: 0.3,
     pointRadius: 0,
     borderWidth: 2,
+    yAxisID: s.y2 ? "y2" : "y",
   }));
+  const scales = { y: { beginAtZero: !opts.noZero } };
+  if (series.some((s) => s.y2)) {
+    scales.y2 = { position: "right", beginAtZero: true, grid: { drawOnChartArea: false } };
+  }
+  if (opts.yMax != null) scales.y.max = opts.yMax;
   charts[id] = new Chart(document.getElementById(id), {
     type: "line",
     data: { labels, datasets },
@@ -79,30 +113,35 @@ function lineChart(id, rows, xKey, series, range) {
       responsive: true,
       interaction: { mode: "index", intersect: false },
       plugins: { legend: { display: series.length > 1 } },
-      scales: { y: { beginAtZero: true } },
+      scales,
     },
   });
 }
 
-function barChart(id, rows, labelKey, valueKey, label) {
+function barChart(id, rows, labelKey, valueKey, label, extraSeries) {
   destroy(id);
   if (!rows || rows.length === 0) return noData(id);
+  const datasets = [{
+    label,
+    data: rows.map((r) => r[valueKey]),
+    backgroundColor: COLORS[0] + "aa",
+    borderColor: COLORS[0],
+    borderWidth: 1,
+  }];
+  (extraSeries || []).forEach((s, i) => datasets.push({
+    label: s.label,
+    data: rows.map((r) => r[s.key]),
+    backgroundColor: COLORS[(i + 2) % COLORS.length] + "aa",
+    borderColor: COLORS[(i + 2) % COLORS.length],
+    borderWidth: 1,
+  }));
   charts[id] = new Chart(document.getElementById(id), {
     type: "bar",
-    data: {
-      labels: rows.map((r) => String(r[labelKey] ?? "—")),
-      datasets: [{
-        label,
-        data: rows.map((r) => r[valueKey]),
-        backgroundColor: "#38bdf8aa",
-        borderColor: "#38bdf8",
-        borderWidth: 1,
-      }],
-    },
+    data: { labels: rows.map((r) => String(r[labelKey] ?? "—")), datasets },
     options: {
       indexAxis: "y",
       responsive: true,
-      plugins: { legend: { display: false } },
+      plugins: { legend: { display: datasets.length > 1 } },
       scales: { x: { beginAtZero: true } },
     },
   });
@@ -118,7 +157,7 @@ function doughnut(id, rows, labelKey, valueKey) {
       datasets: [{
         data: rows.map((r) => r[valueKey]),
         backgroundColor: COLORS,
-        borderColor: "#1e293b",
+        borderColor: cssVar("--card"),
         borderWidth: 2,
       }],
     },
@@ -132,11 +171,91 @@ function renderTable(containerId, rows, cols) {
     el.innerHTML = '<div class="empty">No data for this range</div>';
     return;
   }
-  const head = cols.map((c) => `<th>${c.label}</th>`).join("");
+  const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${c.label}</th>`).join("");
   const body = rows.map((r) =>
-    "<tr>" + cols.map((c) => `<td>${r[c.key] ?? "—"}</td>`).join("") + "</tr>"
+    "<tr>" + cols.map((c) => `<td class="${c.num ? "num" : ""}">${r[c.key] ?? "—"}</td>`).join("") + "</tr>"
   ).join("");
   el.innerHTML = `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ---- DEX rendering ----
+function scoreSeverity(score) {
+  if (score == null) return "na";
+  if (score >= 80) return "ok";
+  if (score >= 60) return "warn";
+  return "bad";
+}
+function scoreColor(score) {
+  return cssVar("--" + (scoreSeverity(score) === "na" ? "muted" : scoreSeverity(score)));
+}
+function chip(score) {
+  return `<span class="chip ${scoreSeverity(score)}">${score == null ? "—" : score}</span>`;
+}
+
+function renderGauge(env) {
+  const score = env && env.score;
+  const el = document.getElementById("dex_score");
+  el.textContent = score == null ? "—" : score;
+  el.className = "gauge-score " + scoreSeverity(score);
+  document.getElementById("dex_grade").textContent = env ? env.grade : "";
+  destroy("dex_gauge");
+  const val = score == null ? 0 : score;
+  charts["dex_gauge"] = new Chart(document.getElementById("dex_gauge"), {
+    type: "doughnut",
+    data: {
+      datasets: [{
+        data: [val, 100 - val],
+        backgroundColor: [scoreColor(score), cssVar("--track")],
+        borderWidth: 0,
+      }],
+    },
+    options: {
+      cutout: "78%",
+      rotation: -135,
+      circumference: 270,
+      responsive: true,
+      plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    },
+  });
+}
+
+function renderFactors(env) {
+  const el = document.getElementById("dex_factors");
+  if (!env || !env.factors || env.factors.length === 0) {
+    el.innerHTML = '<div class="empty">No factor data for this range</div>';
+    return;
+  }
+  el.innerHTML = env.factors.map((f) => {
+    const sev = scoreSeverity(f.score);
+    const src = f.source === "agent" ? "agent" : "logs";
+    return `<div class="factor">
+      <div class="flabel" title="weight ${f.weight}">${f.label}</div>
+      <div class="fbar"><span style="width:${f.score}%;background:var(--${sev === "na" ? "muted" : sev})"></span></div>
+      <div class="fval">${f.value}${f.unit} <span class="src">· ${src}</span></div>
+    </div>`;
+  }).join("");
+}
+
+function renderScoreTable(containerId, rows, nameLabel) {
+  const el = document.getElementById(containerId);
+  if (!rows || rows.length === 0) {
+    el.innerHTML = '<div class="empty">No data for this range</div>';
+    return;
+  }
+  const fmt = (v, d = 1) => (v == null ? "—" : Number(v).toFixed(d).replace(/\.0$/, ""));
+  const head = `<tr><th>${nameLabel}</th><th class="num">Score</th><th class="num">Sessions</th>` +
+    `<th class="num">Logon s</th><th class="num">RTT ms</th><th class="num">Errors</th>` +
+    `<th class="num">Short %</th><th class="num">Profile s</th><th class="num">Input ms</th>` +
+    `<th class="num">Crashes</th></tr>`;
+  const body = rows.map((r) =>
+    `<tr><td>${r.name}</td><td class="num">${chip(r.score)}</td>` +
+    `<td class="num">${r.sessions ?? "—"}</td><td class="num">${fmt(r.logon_sec)}</td>` +
+    `<td class="num">${fmt(r.rtt_ms)}</td><td class="num">${r.errors ?? "—"}</td>` +
+    `<td class="num">${fmt(r.short_session_pct)}</td>` +
+    `<td class="num">${fmt(r.profile_sec)}</td><td class="num">${fmt(r.input_delay_ms)}</td>` +
+    `<td class="num">${r.app_crashes ?? "—"}</td></tr>`
+  ).join("");
+  el.innerHTML = `<table><thead>${head}</thead><tbody>${body}</tbody></table>`;
 }
 
 // ---- thresholds: severity for a single metric value ----
@@ -170,7 +289,7 @@ function renderKpis(k) {
   }).join("");
 }
 
-function renderAlerts(k) {
+function renderAlerts(k, envScore) {
   const checks = [
     ["success_rate", k.success_rate, "Success rate", "%"],
     ["errors", k.errors, "Errors", ""],
@@ -179,11 +298,21 @@ function renderAlerts(k) {
   ];
   const msgs = [];
   let worst = "ok";
+  const bump = (sev) => {
+    if (sev === "bad") worst = "bad";
+    else if (worst !== "bad") worst = "warn";
+  };
+  if (envScore != null && envScore < 60) {
+    bump("bad");
+    msgs.push(`Experience score is ${envScore} — POOR (below 60)`);
+  } else if (envScore != null && envScore < 75) {
+    bump("warn");
+    msgs.push(`Experience score is ${envScore} — FAIR (below 75)`);
+  }
   for (const [metric, val, label, unit] of checks) {
     const sev = severity(metric, val);
     if (sev === "ok") continue;
-    if (sev === "bad") worst = "bad";
-    else if (worst !== "bad") worst = "warn";
+    bump(sev);
     const t = thresholds[metric];
     const limit = sev === "bad" ? t.bad : t.warn;
     const cmp = t.higher_is_better ? "below" : "above";
@@ -252,6 +381,20 @@ function populateDatasetSelect() {
   }
 }
 
+function renderAgentNote(status) {
+  const el = document.getElementById("agent_note");
+  if (status && status.available) {
+    const last = status.last_sample ? new Date(status.last_sample).toLocaleString() : "unknown";
+    el.textContent = `DEX agent feed: ${status.hosts_reporting} host(s) reporting in the last 10 min · last sample ${last}`;
+    el.classList.remove("hidden");
+  } else {
+    el.textContent =
+      "No DEX agent telemetry yet. Deploy agent\\Install-AvdDexAgent.ps1 to your session hosts " +
+      "to add input delay, frame rate, per-session and app-crash data to the experience score.";
+    el.classList.remove("hidden");
+  }
+}
+
 async function load() {
   const range = rangeVal();
   const hp = encodeURIComponent(hostpoolVal());
@@ -261,7 +404,9 @@ async function load() {
   const qs = `range=${range}&hostpool=${hp}`;
 
   try {
-    const [ov, conn, err, host, ux, files] = await Promise.all([
+    const [dexData, dexAgent, ov, conn, err, host, ux, files] = await Promise.all([
+      getJSON(`/api/dex?${qs}`),
+      getJSON(`/api/dex/agent?${qs}`),
       getJSON(`/api/overview?${qs}`),
       getJSON(`/api/connections?${qs}`),
       getJSON(`/api/errors?${qs}`),
@@ -270,10 +415,59 @@ async function load() {
       getJSON(`/api/files?${qs}`),
     ]);
 
-    lastData = { connections: conn, errors: err, hostpool: host, ux, files };
+    lastData = { dex: dexData, dexagent: dexAgent, connections: conn, errors: err, hostpool: host, ux, files };
 
+    // ---- DEX hero + drill-down ----
+    renderGauge(dexData.environment);
+    renderFactors(dexData.environment);
+    lineChart("dex_trend", dexData.trend, "TimeGenerated",
+      [{ key: "Score", label: "Score", fill: true }], range, { yMax: 100 });
+    renderScoreTable("dex_users", dexData.users, "User");
+    renderScoreTable("dex_hosts", dexData.hosts, "Session host");
+    barChart("dex_logon_phases", dexData.logon_phases, "Name", "AvgSec", "Avg s",
+      [{ key: "P95Sec", label: "P95 s" }]);
+    lineChart("dex_graphics", dexData.graphics, "TimeGenerated",
+      [{ key: "AvgFps", label: "FPS" }, { key: "AvgE2EMs", label: "E2E delay ms", y2: true }], range);
+    collectWarnings(dexData, "dex");
+
+    // ---- agent panels ----
+    renderAgentNote(dexAgent.status || dexData.agent);
+    barChart("a_input_user", dexAgent.input_delay_by_user, "User", "AvgInputDelayMs", "Avg ms",
+      [{ key: "MaxInputDelayMs", label: "Max ms" }]);
+    lineChart("a_input_ts", dexAgent.input_delay_timeseries, "TimeGenerated",
+      [{ key: "AvgInputDelayMs", label: "Avg ms" }, { key: "MaxInputDelayMs", label: "Max ms" }], range);
+    renderTable("a_hosts", dexAgent.host_resources, [
+      { key: "Host", label: "Host" },
+      { key: "AvgCpuPct", label: "CPU %", num: true },
+      { key: "MinMemFreeMb", label: "Min free MB", num: true },
+      { key: "AvgDiskReadMs", label: "Disk read ms", num: true },
+      { key: "AvgRttMs", label: "RTT ms", num: true },
+      { key: "AvgLossPct", label: "Loss %", num: true },
+      { key: "AvgFps", label: "FPS", num: true },
+      { key: "UdpPct", label: "UDP %", num: true },
+    ]);
+    renderTable("a_idle", dexAgent.idle_sessions, [
+      { key: "User", label: "User" },
+      { key: "Host", label: "Host" },
+      { key: "State", label: "State" },
+      { key: "IdleMin", label: "Idle min", num: true },
+      { key: "MemMb", label: "Mem MB", num: true },
+    ]);
+    renderTable("a_crashes", dexAgent.crashes, [
+      { key: "App", label: "Application" },
+      { key: "Kind", label: "Kind" },
+      { key: "Count", label: "Count", num: true },
+      { key: "LastSeen", label: "Last seen" },
+    ]);
+    renderTable("a_profiles", dexAgent.profile_loads, [
+      { key: "User", label: "User" },
+      { key: "AvgLoadSec", label: "Avg load s", num: true },
+      { key: "Loads", label: "Loads", num: true },
+    ]);
+
+    // ---- overview / classic panels ----
     renderKpis(ov.kpis);
-    renderAlerts(ov.kpis);
+    renderAlerts(ov.kpis, dexData.environment && dexData.environment.score);
     (ov.warnings || []).forEach((w) => allWarnings.push(`overview: ${w}`));
 
     lineChart("c_conn", conn.timeseries, "TimeGenerated",
@@ -295,10 +489,11 @@ async function load() {
     lineChart("h_mem", host.mem_timeseries, "TimeGenerated",
       [{ key: "AvgAvailMB", label: "Avail MB", fill: true }], range);
     barChart("h_cpuhost", host.cpu_by_host, "Computer", "AvgCPU", "CPU %");
+    doughnut("h_agent", host.agent_health, "Status", "Hosts");
     renderTable("h_table", host.sessions, [
       { key: "SessionHostName", label: "Host" },
-      { key: "Sessions", label: "Sessions" },
-      { key: "Users", label: "Users" },
+      { key: "Sessions", label: "Sessions", num: true },
+      { key: "Users", label: "Users", num: true },
     ]);
     collectWarnings(host, "hostpool");
 
@@ -333,8 +528,12 @@ document.getElementById("range").addEventListener("change", load);
 document.getElementById("hostpool").addEventListener("change", load);
 document.getElementById("auto").addEventListener("change", setupAuto);
 document.getElementById("export").addEventListener("click", exportCsv);
+document.getElementById("theme").addEventListener("click", toggleTheme);
 
 (async function init() {
+  let theme = "dark";
+  try { theme = localStorage.getItem("avd-theme") || "dark"; } catch (e) { /* ignore */ }
+  setTheme(theme);
   populateDatasetSelect();
   try {
     const meta = await getJSON("/api/meta");

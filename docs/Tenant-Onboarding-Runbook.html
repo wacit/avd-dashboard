@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AVD DEX Dashboard — Tenant Onboarding Runbook</title>
+<style>
+:root {
+  --bg: #0f172a; --panel: #1e293b; --card: #243044; --text: #e2e8f0;
+  --muted: #94a3b8; --accent: #38bdf8; --ok: #34d399; --warn: #fbbf24;
+  --bad: #f87171; --border: #334155; --code: #0b1120;
+}
+[data-theme="light"] {
+  --bg: #f1f5f9; --panel: #ffffff; --card: #f8fafc; --text: #0f172a;
+  --muted: #64748b; --accent: #0284c7; --ok: #059669; --warn: #b45309;
+  --bad: #dc2626; --border: #e2e8f0; --code: #f1f5f9;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.55;
+}
+header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px 28px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 18px; margin: 0; }
+header .sub { font-size: 12px; color: var(--muted); }
+#theme {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px; font-size: 14px; cursor: pointer;
+}
+#theme:hover { border-color: var(--accent); }
+main { max-width: 980px; margin: 0 auto; padding: 24px 28px 80px; }
+h2 {
+  font-size: 17px; color: var(--accent); margin: 38px 0 12px;
+  border-bottom: 1px solid var(--border); padding-bottom: 6px;
+}
+h2 .phase {
+  display: inline-block; background: var(--accent); color: var(--bg);
+  border-radius: 6px; font-size: 12px; padding: 1px 8px; margin-right: 8px;
+  vertical-align: 2px;
+}
+h3 { font-size: 14.5px; margin: 22px 0 8px; }
+p, li { font-size: 14px; }
+code {
+  background: var(--code); border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 5px; font-size: 12.5px; font-family: Consolas, monospace;
+}
+pre {
+  background: var(--code); border: 1px solid var(--border); border-radius: 8px;
+  padding: 12px 14px; overflow-x: auto; font-size: 12.5px;
+  font-family: Consolas, monospace; line-height: 1.5;
+}
+pre code { background: none; border: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0 18px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; margin: 14px 0;
+}
+.callout { border-left: 4px solid var(--accent); }
+.callout.warn { border-left-color: var(--warn); }
+.callout.bad { border-left-color: var(--bad); }
+.callout.ok { border-left-color: var(--ok); }
+.callout b:first-child { color: var(--accent); }
+.callout.warn b:first-child { color: var(--warn); }
+.callout.bad b:first-child { color: var(--bad); }
+.callout.ok b:first-child { color: var(--ok); }
+ol.steps > li { margin: 10px 0; }
+ul.check { list-style: none; padding-left: 4px; }
+ul.check li { margin: 7px 0; }
+ul.check li::before { content: "☐ "; color: var(--accent); font-size: 15px; }
+.pill {
+  display: inline-block; border: 1px solid; border-radius: 999px;
+  padding: 0 9px; font-size: 11.5px; font-weight: 600;
+}
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.toc { columns: 2; font-size: 13.5px; }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+kbd {
+  background: var(--card); border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 6px; font-size: 12px; font-family: inherit;
+}
+footer { max-width: 980px; margin: 0 auto; padding: 0 28px 40px; color: var(--muted); font-size: 12px; }
+@media print {
+  header { position: static; } #theme { display: none; }
+  body { background: #fff; color: #000; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>AVD DEX Dashboard — Tenant Onboarding Runbook</h1>
+    <div class="sub">Per-tenant setup for the dashboard (<code>/</code>) and AVD Ops OS (<code>/os</code>) · rev 2026-07</div>
+  </div>
+  <button id="theme" title="Toggle light/dark">🌓 Theme</button>
+</header>
+<main>
+
+<div class="card callout">
+  <b>Scope.</b> Follow this runbook once per customer tenant you onboard.
+  One dashboard instance serves <b>one linked tenant at a time</b>; run one
+  instance (port + folder) per tenant for side-by-side monitoring — see
+  <a href="#multi" style="color:var(--accent)">Multiple tenants</a>.
+</div>
+
+<h2 id="toc">Contents</h2>
+<div class="toc">
+  <div><a href="#arch">Architecture at a glance</a></div>
+  <div><a href="#p0">Phase 0 — Tenant prerequisites</a></div>
+  <div><a href="#p1">Phase 1 — Server install (once)</a></div>
+  <div><a href="#p2">Phase 2 — Link the tenant (Connections app)</a></div>
+  <div><a href="#p3">Phase 3 — Pick the workspace</a></div>
+  <div><a href="#p4">Phase 4 — Deploy the DEX agent</a></div>
+  <div><a href="#p5">Phase 5 — Verify</a></div>
+  <div><a href="#multi">Multiple tenants</a></div>
+  <div><a href="#trouble">Troubleshooting</a></div>
+  <div><a href="#checklist">Printable checklist</a></div>
+</div>
+
+<h2 id="arch">Architecture at a glance</h2>
+<table>
+  <tr><th>Component</th><th>What it does</th><th>Where it runs</th></tr>
+  <tr><td>FastAPI backend</td><td>KQL against Log Analytics + DEX scoring + agent ingest (SQLite)</td><td>Admin box / mgmt VM, port 8010 (bind 127.0.0.1)</td></tr>
+  <tr><td>Dashboard <code>/</code> &amp; Ops OS <code>/os</code></td><td>Front ends over the same API</td><td>Browser</td></tr>
+  <tr><td>Connections app</td><td>Links a tenant (device code or service principal) and picks the workspace — no <code>.env</code> edits, no restart</td><td>Ops OS window</td></tr>
+  <tr><td>AVD DEX agent</td><td>Per-minute in-session telemetry: input delay, FPS, packet loss, UDP use, idle/disconnected sessions, app crashes, FSLogix loads</td><td>Every session host (scheduled task as SYSTEM)</td></tr>
+</table>
+
+<h2 id="p0"><span class="phase">0</span>Tenant prerequisites</h2>
+<p>Collect / confirm these in the <b>customer tenant</b> before you start:</p>
+<table>
+  <tr><th>Item</th><th>Detail</th></tr>
+  <tr><td>AVD Insights enabled</td><td>Host pools onboarded to a Log Analytics workspace with the <b>Azure Monitor Agent + DCR</b> so the <code>WVDConnections</code>, <code>WVDErrors</code>, <code>WVDCheckpoints</code>, <code>WVDConnectionNetworkData</code> and <code>Perf</code> tables are flowing. (Portal → Azure Virtual Desktop → Insights → Open configuration workbook.)</td></tr>
+  <tr><td>Onboarding identity</td><td>An account (or app registration) with <b>Log Analytics Reader</b> on the workspace and <b>Reader</b> on the subscription(s) so the workspace picker can enumerate them.</td></tr>
+  <tr><td>Tenant ID</td><td>Entra admin center → Overview. Optional for device sign-in (blank = "organizations") but recommended for guest/multi-tenant accounts.</td></tr>
+  <tr><td>Optional: graphics data</td><td>Enable the <code>WVDConnectionGraphicsDataPreview</code> table for FPS / end-to-end delay panels without the agent.</td></tr>
+  <tr><td>Session-host reach</td><td>Session hosts must reach the dashboard server on its port (HTTP POST) for agent telemetry, or skip Phase 4.</td></tr>
+</table>
+<div class="card callout warn">
+  <b>Consent note.</b> Device-code sign-in uses the Azure CLI public client
+  app. If the tenant restricts user consent / public client apps, either
+  pre-approve Azure CLI or use the service-principal path in Phase 2.
+</div>
+
+<h2 id="p1"><span class="phase">1</span>Server install (once per instance)</h2>
+<ol class="steps">
+  <li>Clone / copy the <code>avd-dashboard</code> folder to the management box.</li>
+  <li>Run:
+<pre><code>cd avd-dashboard
+Copy-Item .env.example .env      # optional - only needed for agent key / port
+.\run.ps1</code></pre></li>
+  <li>Set the agent ingest key in <code>.env</code> now if you plan to deploy the DEX agent (Phase 4):
+<pre><code>AVD_AGENT_KEY=&lt;long random string&gt;    # e.g. a GUID + suffix</code></pre></li>
+  <li>Browse to <code>http://127.0.0.1:8010/os</code>. First boot shows
+      <span class="pill warn">No workspace linked</span> and auto-opens the
+      <b>Connections</b> app.</li>
+</ol>
+<div class="card callout bad">
+  <b>Security.</b> The <code>/api/connect/*</code> endpoints are
+  unauthenticated by design. Keep the app bound to <code>127.0.0.1</code>
+  (default). If you must serve it remotely, front it with a reverse proxy
+  that enforces authentication before exposing the port.
+</div>
+
+<h2 id="p2"><span class="phase">2</span>Link the tenant (Connections app)</h2>
+<h3>Option A — Device-code sign-in (recommended)</h3>
+<ol class="steps">
+  <li>In the Ops OS open <b>🔗 Connections</b> (Start menu or desktop icon).</li>
+  <li>Enter the customer <b>Tenant ID</b> (optional but recommended), click
+      <b>Sign in with device code</b>.</li>
+  <li>The window shows a one-time code. Go to
+      <code>https://microsoft.com/devicelogin</code>, enter the code, and sign
+      in with the onboarding identity from Phase 0.</li>
+  <li>The app polls automatically and flips to
+      <span class="pill ok">Linked tenant</span> when sign-in completes.
+      Tokens are cached (DPAPI on Windows) — restarts are silent, no re-auth.</li>
+</ol>
+<h3>Option B — Service principal</h3>
+<ol class="steps">
+  <li>Entra admin center → <b>App registrations → New registration</b>
+      (e.g. <code>avd-dex-dashboard</code>), single tenant. No redirect URI needed.</li>
+  <li>Create a <b>client secret</b> (Certificates &amp; secrets) and note tenant ID / client (app) ID / secret value.</li>
+  <li>Assign RBAC (Azure portal, not Entra):
+    <ul>
+      <li><b>Log Analytics Reader</b> on the workspace (or its resource group)</li>
+      <li><b>Reader</b> on the subscription — needed for workspace discovery</li>
+    </ul></li>
+  <li>In Connections expand <b>Use a service principal instead</b>, enter the
+      three values, click <b>Connect service principal</b>. The backend
+      validates against Entra before saving (stored in <code>connection.json</code>
+      on the server — treat that file as a secret).</li>
+</ol>
+
+<h2 id="p3"><span class="phase">3</span>Pick the workspace</h2>
+<ol class="steps">
+  <li>After linking, the <b>Workspace</b> dropdown appears and lists every
+      Log Analytics workspace the identity can see, grouped
+      <code>subscription / resource-group / name</code>.</li>
+  <li>Select the workspace that AVD Insights writes to and click
+      <b>Use selected workspace</b>.</li>
+  <li>Data loads immediately — the DEX score pill in the tray goes live
+      within one refresh (60&nbsp;s max, or click Refresh in Settings).</li>
+</ol>
+<div class="card callout">
+  <b>Tip.</b> If the list is empty the identity lacks <b>Reader</b> on the
+  subscription. You can still link manually: set
+  <code>AVD_WORKSPACE_ID=&lt;workspace GUID&gt;</code> in <code>.env</code>
+  and restart — the linked credential is still used for queries.
+</div>
+
+<h2 id="p4"><span class="phase">4</span>Deploy the DEX agent to session hosts</h2>
+<p>Without the agent the score uses Log Analytics factors only. The agent adds
+input delay, FPS, packet loss, UDP/Shortpath use, idle &amp; disconnected
+session tracking, app crashes/hangs and FSLogix load times.</p>
+<ol class="steps">
+  <li>Copy the <code>agent\</code> folder to a session host (or push via
+      Intune / Nerdio scripted action / GPO startup script).</li>
+  <li>Run as admin on each host:
+<pre><code>.\Install-AvdDexAgent.ps1 `
+    -ServerUrl "http://&lt;dashboard-host&gt;:8010" `
+    -ApiKey    "&lt;AVD_AGENT_KEY from Phase 1&gt;" `
+    -HostPool  "&lt;host pool name&gt;"       # optional but enables pool filtering</code></pre></li>
+  <li>The installer registers scheduled task <b>AvdDexAgent</b> (SYSTEM,
+      every minute). Offline samples spool to disk and back-fill when the
+      server is reachable.</li>
+  <li>Verify from the server: <code>GET /api/agent/status</code> →
+      <code>hosts_reporting</code> &gt; 0, or watch the note in the
+      <b>Agent Telemetry</b> app turn into a feed status line.</li>
+</ol>
+<div class="card callout warn">
+  <b>Image-based pools.</b> For golden-image environments bake the install
+  into the image (or run the installer via Nerdio scripted action on
+  provision) so re-imaged hosts keep reporting.
+</div>
+
+<h2 id="p5"><span class="phase">5</span>Verify</h2>
+<ul class="check">
+  <li>Connections shows <b>Linked tenant</b> + the chosen workspace name.</li>
+  <li>Tray pill shows a numeric DEX score (not "DEX —").</li>
+  <li>Experience Score app shows factor bars sourced from <i>logs</i> (and <i>agent</i> after Phase 4).</li>
+  <li>User Experience / Host Experience windows list rows for the selected range.</li>
+  <li>Logon Waterfall shows checkpoint milestones.</li>
+  <li>Agent Telemetry shows hosts reporting (if Phase 4 done).</li>
+  <li>No red warnings in the classic dashboard banner (<code>/</code>) other than optional tables you skipped (e.g. graphics preview).</li>
+</ul>
+
+<h2 id="multi">Multiple tenants</h2>
+<p>Each instance holds one linked tenant (<code>connection.json</code> +
+token cache are per-folder). To monitor several tenants side by side:</p>
+<table>
+  <tr><th>Tenant</th><th>Folder</th><th>Port</th><th>URL</th></tr>
+  <tr><td>Tenant A (e.g. FHU)</td><td><code>avd-dashboard-fhu</code></td><td>8010</td><td><code>http://127.0.0.1:8010/os</code></td></tr>
+  <tr><td>Tenant B</td><td><code>avd-dashboard-tenantB</code></td><td>8011</td><td><code>http://127.0.0.1:8011/os</code></td></tr>
+  <tr><td>Tenant C</td><td><code>avd-dashboard-tenantC</code></td><td>8012</td><td><code>http://127.0.0.1:8012/os</code></td></tr>
+</table>
+<p>Copy the project folder per tenant, set <code>AVD_APP_PORT</code> (and a
+unique <code>AVD_AGENT_KEY</code>) in each <code>.env</code>, then run this
+runbook's Phases 2–5 in each instance. Switching a single instance to a
+different tenant is just <b>Disconnect → link again</b>.</p>
+
+<h2 id="trouble">Troubleshooting</h2>
+<table>
+  <tr><th>Symptom</th><th>Likely cause → fix</th></tr>
+  <tr><td>Device code fails with <code>AADSTS500113</code> / consent error</td><td>Tenant blocks public-client/Azure CLI consent → use service principal (Phase 2B).</td></tr>
+  <tr><td><code>AADSTS50076</code> / MFA loop</td><td>Conditional Access requires compliant device → sign in from an allowed device or use SP.</td></tr>
+  <tr><td>Workspace dropdown empty</td><td>Identity lacks <b>Reader</b> on subscriptions → assign Reader, click ↻. Or set <code>AVD_WORKSPACE_ID</code> manually.</td></tr>
+  <tr><td>Panels show "table may not exist"</td><td>AVD Insights not onboarded / DCR missing that table → fix Insights config; optional tables (graphics preview) can be ignored.</td></tr>
+  <tr><td>Score shows but users/hosts empty</td><td>Selected range has no connections → widen the range; confirm host pool filter.</td></tr>
+  <tr><td>Agent ingest returns 503</td><td><code>AVD_AGENT_KEY</code> not set on the server → set it in <code>.env</code>, restart.</td></tr>
+  <tr><td>Agent ingest returns 401</td><td>Key mismatch → re-run installer with the server's key.</td></tr>
+  <tr><td>No input-delay data</td><td>Counter requires Win10/Server 2019+ and an active session; instance appears only while users are logged on.</td></tr>
+  <tr><td>Queries fail after re-linking</td><td>Stale token cache → Disconnect, then link again; check server log for the credential error.</td></tr>
+</table>
+
+<h2 id="checklist">Printable checklist (per tenant)</h2>
+<ul class="check">
+  <li>Phase 0: AVD Insights tables flowing; onboarding identity has Log Analytics Reader + Reader; Tenant ID recorded</li>
+  <li>Phase 1: Instance folder + port assigned; <code>AVD_AGENT_KEY</code> generated</li>
+  <li>Phase 2: Tenant linked (device code or SP) — Connections shows account + tenant</li>
+  <li>Phase 3: Workspace selected; data loading</li>
+  <li>Phase 4: DEX agent deployed to all session hosts; <code>hosts_reporting</code> matches host count</li>
+  <li>Phase 5: Verification list all green; handover URL shared with the customer admin</li>
+</ul>
+
+</main>
+<footer>AVD DEX Dashboard · Tenant Onboarding Runbook · generated from the avd-dashboard project docs</footer>
+<script>
+(function () {
+  var btn = document.getElementById("theme");
+  var saved = null;
+  try { saved = localStorage.getItem("avd-runbook-theme"); } catch (e) {}
+  if (saved) document.documentElement.dataset.theme = saved;
+  btn.addEventListener("click", function () {
+    var next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("avd-runbook-theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

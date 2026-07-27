@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     app_port: int = 8000
     default_range: str = "24h"
 
+    # ---- DEX agent ingest ----
+    # Shared secret the AVD DEX agent must send in X-Agent-Key. Ingest is
+    # disabled (503) until this is set.
+    agent_key: str = ""
+    # SQLite file for agent telemetry (relative paths resolve to project root).
+    agent_db: str = "dex-agent.db"
+    agent_retention_days: int = 14
+
     # Alert thresholds (override via AVD_THR_* env vars). For success_rate
     # higher is better, so "warn" is the floor for OK and "bad" is the floor
     # for WARN. For the rest, higher is worse: >= warn is WARN, >= bad is BAD.

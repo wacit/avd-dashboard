@@ -3,17 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AVD Insights Dashboard</title>
+  <title>AVD DEX Dashboard</title>
   <link rel="stylesheet" href="/styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header>
     <div class="title">
-      <h1>AVD Insights Dashboard</h1>
+      <h1>AVD DEX Dashboard</h1>
       <span id="status" class="status">Loading…</span>
     </div>
     <div class="controls">
+      <button id="theme" title="Toggle light/dark theme">🌓</button>
       <label for="hostpool">Host pool</label>
       <select id="hostpool">
         <option value="all">All host pools</option>
@@ -38,9 +39,50 @@
   <div id="alerts" class="alerts hidden"></div>
   <div id="banner" class="banner hidden"></div>
 
+  <section class="hero">
+    <div class="card score-card">
+      <h3>Experience score</h3>
+      <div class="gauge-wrap"><canvas id="dex_gauge"></canvas>
+        <div class="gauge-center"><div id="dex_score" class="gauge-score">—</div>
+        <div id="dex_grade" class="gauge-grade"></div></div>
+      </div>
+    </div>
+    <div class="card factors-card">
+      <h3>Factor breakdown <span class="hint">weighted, eG-style layered model</span></h3>
+      <div id="dex_factors" class="factors"></div>
+    </div>
+    <div class="card trend-card">
+      <h3>Experience score trend</h3>
+      <canvas id="dex_trend"></canvas>
+    </div>
+  </section>
+
   <section class="kpis" id="kpis"></section>
 
   <main>
+    <section class="panel-group">
+      <h2>Digital experience drill-down</h2>
+      <div class="grid">
+        <div class="card wide"><h3>Users ranked by experience (worst first)</h3><div id="dex_users" class="table-wrap tall"></div></div>
+        <div class="card wide"><h3>Session hosts ranked by experience (worst first)</h3><div id="dex_hosts" class="table-wrap tall"></div></div>
+        <div class="card"><h3>Logon milestone waterfall (avg s from connection start)</h3><canvas id="dex_logon_phases"></canvas></div>
+        <div class="card"><h3>Graphics quality — FPS &amp; end-to-end delay</h3><canvas id="dex_graphics"></canvas></div>
+      </div>
+    </section>
+
+    <section class="panel-group">
+      <h2>In-session telemetry (AVD DEX agent)</h2>
+      <div id="agent_note" class="note hidden"></div>
+      <div class="grid">
+        <div class="card"><h3>Input delay by user (ms)</h3><canvas id="a_input_user"></canvas></div>
+        <div class="card"><h3>Input delay over time (ms)</h3><canvas id="a_input_ts"></canvas></div>
+        <div class="card"><h3>Host resources (agent-sampled)</h3><div id="a_hosts" class="table-wrap"></div></div>
+        <div class="card"><h3>App crashes &amp; hangs</h3><div id="a_crashes" class="table-wrap"></div></div>
+        <div class="card"><h3>FSLogix profile loads (agent)</h3><div id="a_profiles" class="table-wrap"></div></div>
+        <div class="card"><h3>Disconnected / long-idle sessions</h3><div id="a_idle" class="table-wrap"></div></div>
+      </div>
+    </section>
+
     <section class="panel-group">
       <h2>Connection health</h2>
       <div class="grid">
@@ -66,12 +108,13 @@
         <div class="card"><h3>Avg CPU %</h3><canvas id="h_cpu"></canvas></div>
         <div class="card"><h3>Avg available memory (MB)</h3><canvas id="h_mem"></canvas></div>
         <div class="card"><h3>CPU % by host</h3><canvas id="h_cpuhost"></canvas></div>
+        <div class="card"><h3>AVD agent health</h3><canvas id="h_agent"></canvas></div>
         <div class="card"><h3>Sessions by host</h3><div id="h_table" class="table-wrap"></div></div>
       </div>
     </section>
 
     <section class="panel-group">
-      <h2>User experience</h2>
+      <h2>User experience (network)</h2>
       <div class="grid">
         <div class="card"><h3>Round-trip time (ms)</h3><canvas id="u_rtt"></canvas></div>
         <div class="card"><h3>Available bandwidth (KBps)</h3><canvas id="u_bw"></canvas></div>

@@ -209,6 +209,204 @@ WVDCheckpoints
 | top 15 by AvgProfileSec desc
 """
 
+# ---------- DEX factor aggregates (per user / per host) ----------
+# Each factor is a separate small query so a missing table only removes
+# that one factor from the score instead of breaking the whole DEX view.
+# WVDConnectionNetworkData / WVDCheckpoints carry no UserName, so they are
+# joined to WVDConnections via CorrelationId.
+
+DEX_USER_CONN = """
+WVDConnections
+{HP}
+| where isnotempty(UserName)
+| summarize
+    Attempts  = dcountif(CorrelationId, State == "Started"),
+    Connected = dcountif(CorrelationId, State == "Connected")
+  by UserName
+"""
+
+DEX_HOST_CONN = """
+WVDConnections
+{HP}
+| where isnotempty(SessionHostName)
+| summarize
+    Attempts  = dcountif(CorrelationId, State == "Started"),
+    Connected = dcountif(CorrelationId, State == "Connected")
+  by SessionHostName
+"""
+
+DEX_USER_LOGON = """
+WVDConnections
+{HP}
+| where State in ("Started", "Connected") and isnotempty(UserName)
+| summarize
+    StartTime   = minif(TimeGenerated, State == "Started"),
+    ConnectTime = minif(TimeGenerated, State == "Connected")
+  by CorrelationId, UserName
+| where isnotempty(StartTime) and isnotempty(ConnectTime)
+| extend Sec = datetime_diff('second', ConnectTime, StartTime)
+| where Sec between (0 .. 600)
+| summarize AvgSec = round(avg(Sec), 1), Count = count() by UserName
+"""
+
+DEX_HOST_LOGON = """
+WVDConnections
+{HP}
+| where State in ("Started", "Connected")
+| summarize
+    StartTime   = minif(TimeGenerated, State == "Started"),
+    ConnectTime = minif(TimeGenerated, State == "Connected"),
+    Host        = anyif(SessionHostName, isnotempty(SessionHostName))
+  by CorrelationId
+| where isnotempty(StartTime) and isnotempty(ConnectTime) and isnotempty(Host)
+| extend Sec = datetime_diff('second', ConnectTime, StartTime)
+| where Sec between (0 .. 600)
+| summarize AvgSec = round(avg(Sec), 1), Count = count() by SessionHostName = Host
+"""
+
+DEX_USER_RTT = """
+WVDConnectionNetworkData
+{HP}
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(UserName)
+    | summarize arg_max(TimeGenerated, UserName) by CorrelationId
+  ) on CorrelationId
+| summarize AvgRTT = round(avg(EstRoundTripTimeInMs), 1), Count = count() by UserName
+"""
+
+DEX_HOST_RTT = """
+WVDConnectionNetworkData
+{HP}
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(SessionHostName)
+    | summarize arg_max(TimeGenerated, SessionHostName) by CorrelationId
+  ) on CorrelationId
+| summarize AvgRTT = round(avg(EstRoundTripTimeInMs), 1), Count = count() by SessionHostName
+"""
+
+DEX_USER_ERRORS = """
+WVDErrors
+{HP}
+| where isnotempty(UserName)
+| summarize Errors = count() by UserName
+"""
+
+DEX_HOST_ERRORS = """
+WVDErrors
+{HP}
+| where isnotempty(SessionHostName)
+| summarize Errors = count() by SessionHostName
+"""
+
+DEX_USER_PROFILE = """
+WVDCheckpoints
+{HP}
+| where Name has "Profile" or Name has "FSLogix"
+| summarize StartT = min(TimeGenerated), EndT = max(TimeGenerated) by CorrelationId
+| extend Sec = datetime_diff('second', EndT, StartT)
+| where Sec between (0 .. 600)
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(UserName)
+    | summarize arg_max(TimeGenerated, UserName) by CorrelationId
+  ) on CorrelationId
+| summarize AvgSec = round(avg(Sec), 1), Count = count() by UserName
+"""
+
+DEX_HOST_PROFILE = """
+WVDCheckpoints
+{HP}
+| where Name has "Profile" or Name has "FSLogix"
+| summarize StartT = min(TimeGenerated), EndT = max(TimeGenerated) by CorrelationId
+| extend Sec = datetime_diff('second', EndT, StartT)
+| where Sec between (0 .. 600)
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(SessionHostName)
+    | summarize arg_max(TimeGenerated, SessionHostName) by CorrelationId
+  ) on CorrelationId
+| summarize AvgSec = round(avg(Sec), 1), Count = count() by SessionHostName
+"""
+
+# Connection stability (RDPSoft DEX factor): frequent short-lived sessions
+# indicate disconnect/reconnect churn - a strong "bad experience" signal.
+
+DEX_USER_STABILITY = """
+WVDConnections
+{HP}
+| where State in ("Connected", "Completed") and isnotempty(UserName)
+| summarize
+    ConnT = minif(TimeGenerated, State == "Connected"),
+    EndT  = maxif(TimeGenerated, State == "Completed")
+  by CorrelationId, UserName
+| where isnotempty(ConnT) and isnotempty(EndT)
+| extend DurMin = datetime_diff('minute', EndT, ConnT)
+| where DurMin >= 0
+| summarize Sessions = count(), ShortSessions = countif(DurMin < 5) by UserName
+| extend ShortPct = round(100.0 * ShortSessions / Sessions, 1)
+"""
+
+DEX_HOST_STABILITY = """
+WVDConnections
+{HP}
+| where State in ("Connected", "Completed") and isnotempty(SessionHostName)
+| summarize
+    ConnT = minif(TimeGenerated, State == "Connected"),
+    EndT  = maxif(TimeGenerated, State == "Completed")
+  by CorrelationId, SessionHostName
+| where isnotempty(ConnT) and isnotempty(EndT)
+| extend DurMin = datetime_diff('minute', EndT, ConnT)
+| where DurMin >= 0
+| summarize Sessions = count(), ShortSessions = countif(DurMin < 5) by SessionHostName
+| extend ShortPct = round(100.0 * ShortSessions / Sessions, 1)
+"""
+
+# ---------- Logon milestone waterfall (eG-style logon breakdown) ----------
+# Average seconds from the connection Start to each WVDCheckpoints
+# milestone. Checkpoint names vary by AVD agent version, so this is
+# name-agnostic: it shows the most common milestones and their timing.
+
+DEX_LOGON_PHASES = """
+WVDCheckpoints
+{HP}
+| join kind=inner (
+    WVDConnections
+    | where State == "Started"
+    | summarize StartT = min(TimeGenerated) by CorrelationId
+  ) on CorrelationId
+| extend Sec = datetime_diff('millisecond', TimeGenerated, StartT) / 1000.0
+| where Sec between (0 .. 600)
+| summarize AvgSec = round(avg(Sec), 1), P95Sec = round(percentile(Sec, 95), 1), Count = count() by Name
+| top 12 by Count desc
+| order by AvgSec asc
+"""
+
+# ---------- Graphics quality (frame rate / end-to-end delay) ----------
+# Requires the WVDConnectionGraphicsDataPreview table (preview feature).
+# column_ifexists keeps this resilient to schema differences.
+
+DEX_GRAPHICS_TIMESERIES = """
+WVDConnectionGraphicsDataPreview
+{HP}
+| extend E2E = todouble(column_ifexists("AvgEndToEndDelayInMs", real(null))),
+         Fps = todouble(column_ifexists("AvgFramesPerSecond", real(null)))
+| summarize AvgE2EMs = round(avg(E2E), 1), AvgFps = round(avg(Fps), 1)
+  by bin(TimeGenerated, {bin})
+| order by TimeGenerated asc
+"""
+
+# ---------- AVD agent health (latest status per session host) ----------
+
+DEX_AGENT_HEALTH = """
+WVDAgentHealthStatus
+{HP}
+| summarize arg_max(TimeGenerated, Status) by SessionHostName
+| summarize Hosts = count() by Status
+| order by Hosts desc
+"""
+
 # ---------- Overview KPIs (single-value scalars) ----------
 
 KPI_CONNECTIONS = """
