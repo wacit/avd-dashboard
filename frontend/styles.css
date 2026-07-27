@@ -66,6 +66,16 @@ select, button {
   cursor: pointer;
 }
 button:hover { border-color: var(--accent); }
+.btn-link {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 14px;
+  text-decoration: none;
+}
+.btn-link:hover { border-color: var(--accent); }
 
 .banner {
   margin: 12px 24px 0;

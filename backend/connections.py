@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import urllib.parse
 import urllib.request
 import uuid
@@ -100,9 +101,45 @@ def workspace_id() -> str:
     return _load().get("workspace_id") or settings.workspace_id
 
 
+# One cached token probe instead of letting every KQL query walk the whole
+# DefaultAzureCredential chain (16+ chain walks per dashboard refresh when
+# nothing is signed in, each dumping the full failure list to the log).
+_health = {"gen": -1, "ts": 0.0, "error": None}
+
+
+def credential_health() -> str | None:
+    """Return None when a token can be acquired, else one actionable message.
+
+    Probes at most once per minute per credential generation; queries
+    short-circuit on the cached result.
+    """
+    now = time.monotonic()
+    if _health["gen"] == generation and now - _health["ts"] < 60:
+        return _health["error"]
+    error = None
+    try:
+        get_credential().get_token(LOGS_SCOPE)
+    except Exception as exc:  # noqa: BLE001 - any failure means "not signed in"
+        name = type(exc).__name__
+        mode = _load().get("auth_mode")
+        if mode == "device":
+            error = (f"Cached sign-in expired ({name}) - open the Connections "
+                     "app and link the tenant again.")
+        elif mode == "sp":
+            error = (f"Service principal sign-in failed ({name}) - re-enter "
+                     "it in the Connections app.")
+        else:
+            error = ("Not signed in to Azure - link your tenant in the "
+                     "Connections app (device code), or install Azure CLI and "
+                     "run 'az login', or set AZURE_TENANT_ID / AZURE_CLIENT_ID "
+                     "/ AZURE_CLIENT_SECRET.")
+    _health.update(gen=generation, ts=now, error=error)
+    return error
+
+
 def status() -> dict:
     cfg = _load()
-    return {
+    out = {
         "mode": cfg.get("auth_mode") or ("env" if settings.workspace_id else "none"),
         "tenant_id": cfg.get("tenant_id"),
         "account": cfg.get("account"),
@@ -110,6 +147,10 @@ def status() -> dict:
         "workspace_name": cfg.get("workspace_name"),
         "workspace_configured": bool(workspace_id()),
     }
+    # Only probe when queries would actually run (a workspace is set);
+    # otherwise the UI's "not linked" state is message enough.
+    out["credential_error"] = credential_health() if out["workspace_configured"] else None
+    return out
 
 
 # ----------------------------------------------------------- device flow --

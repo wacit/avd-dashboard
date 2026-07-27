@@ -92,6 +92,10 @@ def run_query(
     if not ws:
         return [], "No workspace linked (use the Connections app, or set AVD_WORKSPACE_ID)."
 
+    health = connections.credential_health()
+    if health:
+        return [], health
+
     try:
         resp = get_client().query_workspace(
             workspace_id=ws,

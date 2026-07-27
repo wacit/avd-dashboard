@@ -582,6 +582,9 @@ const APPS = {
         ${c.tenant_id ? `<div>Tenant: <b>${c.tenant_id}</b></div>` : ""}
         <div>Workspace: <b>${c.workspace_name || c.workspace_id || "none"}</b></div>
       </div>`;
+      if (c.credential_error) {
+        html += `<div class="note" style="border-color:var(--warn);color:var(--warn);background:color-mix(in srgb,var(--warn) 10%, var(--panel))">${c.credential_error}</div>`;
+      }
 
       if (flow.status === "pending") {
         html += `<h5 class="sect">Finish sign-in</h5>
@@ -947,8 +950,12 @@ setInterval(() => {
     if (!state.meta.workspace_configured) {
       toast("No workspace linked — open the Connections app to link your tenant.", "warn");
       openApp("connect");
+    } else if (state.connect.credential_error) {
+      toast(state.connect.credential_error, "warn");
+      openApp("connect");
     }
   } catch (e) {}
+  if (window.location.hash === "#connections") openApp("connect");
   try {
     const hp = await getJSON("/api/hostpools");
     state.hostpools = hp.hostpools || [];
