@@ -157,11 +157,37 @@ footer { max-width: 980px; margin: 0 auto; padding: 0 28px 40px; color: var(--mu
 Copy-Item .env.example .env      # optional - only needed for agent key / port
 .\run.ps1</code></pre></li>
   <li>Set the agent ingest key in <code>.env</code> now if you plan to deploy the DEX agent (Phase 4):
-<pre><code>AVD_AGENT_KEY=&lt;long random string&gt;    # e.g. a GUID + suffix</code></pre></li>
+<pre><code>AVD_AGENT_KEY=&lt;long random string&gt;</code></pre></li>
   <li>Browse to <code>http://127.0.0.1:8010/os</code>. First boot shows
       <span class="pill warn">No workspace linked</span> and auto-opens the
       <b>Connections</b> app.</li>
 </ol>
+<div class="card callout">
+  <b>About AVD_AGENT_KEY.</b> This key is not gathered from Azure — <b>you
+  invent it</b>. It is a shared secret between this dashboard instance and
+  its session-host agents: the agent sends it in the
+  <code>X-Agent-Key</code> header on every POST to
+  <code>/api/agent/ingest</code>, and the server accepts telemetry only on
+  a (constant-time) match. Generate one:
+<pre><code>powershell -Command "[guid]::NewGuid().ToString('N') + [guid]::NewGuid().ToString('N')"</code></pre>
+  Rules of thumb:
+  <ul>
+    <li><b>One key per dashboard instance</b>, shared by all of that
+        instance's session hosts. Running one instance per tenant?
+        Generate a <b>different key per instance</b>.</li>
+    <li>Stored in plaintext in <code>.env</code> (server) and
+        <code>C:\Program Files\AvdDexAgent\agent-config.json</code>
+        (hosts) — admin/SYSTEM-readable only; neither file is in git.
+        Treat it like a password.</li>
+    <li>Until it is set, ingest returns <b>503</b> (disabled); a wrong key
+        returns <b>401</b>.</li>
+    <li><b>Rotation:</b> set a new value in <code>.env</code>, restart the
+        server, then re-run the installer (or update
+        <code>agent-config.json</code>) on the hosts. Agents holding the
+        old key get 401s and spool samples locally, then back-fill once
+        updated — no data loss.</li>
+  </ul>
+</div>
 <div class="card callout bad">
   <b>Security.</b> The <code>/api/connect/*</code> endpoints are
   unauthenticated by design. Keep the app bound to <code>127.0.0.1</code>
