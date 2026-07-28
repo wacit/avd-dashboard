@@ -83,7 +83,11 @@ WVDErrors
 ERR_BY_HOST = """
 WVDErrors
 {HP}
-| where isnotempty(SessionHostName)
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(SessionHostName)
+    | summarize arg_max(TimeGenerated, SessionHostName) by CorrelationId
+  ) on CorrelationId
 | summarize Errors = count() by SessionHostName
 | top 12 by Errors desc
 """
@@ -153,7 +157,11 @@ WVDConnectionNetworkData
 UX_RTT_BY_HOST = """
 WVDConnectionNetworkData
 {HP}
-| where isnotempty(SessionHostName)
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(SessionHostName)
+    | summarize arg_max(TimeGenerated, SessionHostName) by CorrelationId
+  ) on CorrelationId
 | summarize AvgRTT = round(avg(EstRoundTripTimeInMs), 1)
   by SessionHostName
 | top 15 by AvgRTT desc
@@ -185,7 +193,7 @@ WVDCheckpoints
 {HP}
 | where Name has "Profile" or Name has "FSLogix"
 | summarize StartT = min(TimeGenerated), EndT = max(TimeGenerated)
-  by CorrelationId, SessionHostName
+  by CorrelationId
 | extend ProfileLoadSec = datetime_diff('second', EndT, StartT)
 | where ProfileLoadSec between (0 .. 600)
 | summarize
@@ -201,9 +209,14 @@ WVDCheckpoints
 {HP}
 | where Name has "Profile" or Name has "FSLogix"
 | summarize StartT = min(TimeGenerated), EndT = max(TimeGenerated)
-  by CorrelationId, SessionHostName
+  by CorrelationId
 | extend ProfileLoadSec = datetime_diff('second', EndT, StartT)
 | where ProfileLoadSec between (0 .. 600)
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(SessionHostName)
+    | summarize arg_max(TimeGenerated, SessionHostName) by CorrelationId
+  ) on CorrelationId
 | summarize AvgProfileSec = round(avg(ProfileLoadSec), 1)
   by SessionHostName
 | top 15 by AvgProfileSec desc
@@ -296,7 +309,11 @@ WVDErrors
 DEX_HOST_ERRORS = """
 WVDErrors
 {HP}
-| where isnotempty(SessionHostName)
+| join kind=inner (
+    WVDConnections
+    | where isnotempty(SessionHostName)
+    | summarize arg_max(TimeGenerated, SessionHostName) by CorrelationId
+  ) on CorrelationId
 | summarize Errors = count() by SessionHostName
 """
 
