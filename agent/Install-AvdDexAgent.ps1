@@ -8,7 +8,7 @@
   task that runs the agent every minute as SYSTEM.
 
 .EXAMPLE
-  .\Install-AvdDexAgent.ps1 -ServerUrl http://dashboard-host:8000 -ApiKey <key> -HostPool FHU-Pool1
+  .\Install-AvdDexAgent.ps1 -ServerUrl http://dashboard-host:8000 -ApiKey <key> -HostPool Contoso-Pool1
 
 .EXAMPLE
   .\Install-AvdDexAgent.ps1 -Uninstall
