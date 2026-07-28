@@ -1,0 +1,28 @@
+# Provisioned datasources for the AVD DEX Grafana stack.
+# __TENANT_ID__ / __CLIENT_ID__ / __CLIENT_SECRET__ are substituted by
+# setup-grafana-lxc.sh at install time.
+apiVersion: 1
+
+datasources:
+  # AVD Insights tables (WVDConnections, WVDErrors, Perf, ...) via KQL.
+  - name: Azure Monitor (AVD)
+    uid: azmon-avd
+    type: grafana-azure-monitor-datasource
+    access: proxy
+    jsonData:
+      cloudName: azuremonitor
+      azureAuthType: clientsecret
+      tenantId: __TENANT_ID__
+      clientId: __CLIENT_ID__
+    secureJsonData:
+      clientSecret: __CLIENT_SECRET__
+    editable: true
+
+  # The AVD DEX Dashboard's own JSON API: composite score, ranked
+  # users/hosts, and the session-host agent telemetry.
+  - name: AVD DEX API
+    uid: infinity-avd
+    type: yesoreyeram-infinity-datasource
+    access: proxy
+    jsonData: {}
+    editable: true

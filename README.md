@@ -159,6 +159,14 @@ perf counters and event logs — no services, no external dependencies.
 Failed uploads spool to `C:\Program Files\AvdDexAgent\spool` and retry.
 Uninstall with `Install-AvdDexAgent.ps1 -Uninstall`.
 
+## Grafana (future state, self-hosted)
+
+[grafana/](grafana/) contains a deployable Grafana stack for long-range
+trending, alert dispatch (Teams/email) and wallboards: a Proxmox LXC setup
+script, provisioned Azure Monitor + Infinity datasources, and an
+**AVD DEX Overview** dashboard that reads the same KQL tables plus this
+app's `/api/dex` score API. See [grafana/README.md](grafana/README.md).
+
 ## Runbooks
 
 - **Onboarding** — [docs/Tenant-Onboarding-Runbook.html](docs/Tenant-Onboarding-Runbook.html)

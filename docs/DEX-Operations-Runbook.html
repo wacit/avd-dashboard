@@ -109,6 +109,7 @@ ul.check li::before { content: "☐ "; color: var(--accent); font-size: 15px; }
   <div><a href="#weekly">9 · Weekly hygiene checklist</a></div>
   <div><a href="#glossary">10 · Metric glossary</a></div>
   <div><a href="#maint">11 · Maintenance tasks</a></div>
+  <div><a href="#grafana">12 · Future state: Grafana</a></div>
 </div>
 
 <h2 id="daily">1 · Daily 5-minute check</h2>
@@ -311,6 +312,32 @@ header in the experience tables for the same definitions in-app.</p>
   <tr><td>Trim the telemetry DB</td><td>Automatic — <code>AVD_AGENT_RETENTION_DAYS</code> (default 14) prunes on ingest.</td></tr>
   <tr><td>Tune bands/weights</td><td><code>backend/dex.py</code> (score factors) and <code>AVD_THR_*</code> env vars (KPI alert strip).</td></tr>
 </table>
+
+<h2 id="grafana">12 · Future state: Grafana (self-hosted LXC)</h2>
+<p>The repo's <code>grafana/</code> folder deploys Grafana OSS into a
+Proxmox LXC with everything provisioned: an Azure Monitor datasource for
+the AVD Insights tables, an Infinity datasource reading this dashboard's
+<code>/api/dex</code> score API, and an <b>AVD DEX Overview</b> dashboard
+(score stat + trend + factors, ranked users/hosts, connections / RTT /
+errors / logon / profile KQL panels, agent input-delay and host-saturation
+tables).</p>
+<p>Use Grafana for what this app doesn't do: 30–90 day trending with
+annotations, <b>alert rules that dispatch to Teams/email</b> (suggested
+starter rules are in <code>grafana/README.md</code>), kiosk wallboards,
+and per-customer folders with RBAC. The Ops OS remains the interactive
+triage tool and the single source of truth for the score. Deploy:</p>
+<ol class="steps">
+  <li>Copy <code>grafana/</code> to the Proxmox host.</li>
+  <li><code>./setup-grafana-lxc.sh --ctid 240 --tenant-id … --client-id …
+      --client-secret '…' --ip 192.168.1.240/24 --gw 192.168.1.1</code></li>
+  <li>Set the dashboard's <code>workspace</code> (ARM resource ID) and
+      <code>dex_url</code> variables; save. Bind the DEX app to
+      <code>0.0.0.0</code> so the CT can reach it — trusted LAN only.</li>
+</ol>
+<p>Phase 3 (when 90-day agent history matters): dual-write agent payloads
+to the Azure Monitor Logs Ingestion API (custom table
+<code>AvdDex_CL</code>) so agent signals become KQL-queryable next to the
+WVD* tables — documented in <code>grafana/README.md</code>.</p>
 
 </main>
 <footer style="max-width:1000px;margin:0 auto;padding:0 28px 40px;color:var(--muted);font-size:12px">

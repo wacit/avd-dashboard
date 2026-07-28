@@ -1,0 +1,327 @@
+{
+  "title": "AVD DEX Overview",
+  "uid": "avd-dex-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "time": { "from": "now-24h", "to": "now" },
+  "refresh": "1m",
+  "templating": {
+    "list": [
+      {
+        "name": "workspace",
+        "label": "Log Analytics workspace resource ID",
+        "type": "textbox",
+        "query": "/subscriptions/CHANGE-ME/resourceGroups/CHANGE-ME/providers/Microsoft.OperationalInsights/workspaces/CHANGE-ME",
+        "current": { "text": "", "value": "" }
+      },
+      {
+        "name": "dex_url",
+        "label": "AVD DEX Dashboard base URL",
+        "type": "textbox",
+        "query": "http://127.0.0.1:8010",
+        "current": { "text": "http://127.0.0.1:8010", "value": "http://127.0.0.1:8010" }
+      },
+      {
+        "name": "dex_range",
+        "label": "DEX API range",
+        "type": "custom",
+        "query": "1h,24h,7d,30d",
+        "current": { "text": "24h", "value": "24h" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Experience score",
+      "type": "stat",
+      "gridPos": { "h": 6, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 100,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 60 },
+              { "color": "green", "value": 80 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "none" },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "${dex_url}/api/dex?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "environment",
+          "columns": [{ "selector": "score", "text": "Score", "type": "number" }]
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Score trend",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 10, "x": 4, "y": 0 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": { "defaults": { "min": 0, "max": 100, "custom": { "fillOpacity": 12 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "timeseries",
+          "url": "${dex_url}/api/dex?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "trend",
+          "columns": [
+            { "selector": "TimeGenerated", "text": "Time", "type": "timestamp" },
+            { "selector": "Score", "text": "Score", "type": "number" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Factor breakdown",
+      "type": "table",
+      "gridPos": { "h": 6, "w": 10, "x": 14, "y": 0 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "${dex_url}/api/dex?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "environment.factors",
+          "columns": [
+            { "selector": "label", "text": "Factor", "type": "string" },
+            { "selector": "value", "text": "Value", "type": "number" },
+            { "selector": "unit", "text": "Unit", "type": "string" },
+            { "selector": "score", "text": "Sub-score", "type": "number" },
+            { "selector": "weight", "text": "Weight", "type": "number" },
+            { "selector": "source", "text": "Source", "type": "string" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Users ranked by experience (worst first)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "${dex_url}/api/dex?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "users",
+          "columns": [
+            { "selector": "name", "text": "User", "type": "string" },
+            { "selector": "score", "text": "Score", "type": "number" },
+            { "selector": "sessions", "text": "Sessions", "type": "number" },
+            { "selector": "logon_sec", "text": "Logon s", "type": "number" },
+            { "selector": "rtt_ms", "text": "RTT ms", "type": "number" },
+            { "selector": "errors", "text": "Errors", "type": "number" },
+            { "selector": "short_session_pct", "text": "Short %", "type": "number" },
+            { "selector": "profile_sec", "text": "Profile s", "type": "number" },
+            { "selector": "input_delay_ms", "text": "Input ms", "type": "number" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Hosts ranked by experience (worst first)",
+      "type": "table",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "${dex_url}/api/dex?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "hosts",
+          "columns": [
+            { "selector": "name", "text": "Host", "type": "string" },
+            { "selector": "score", "text": "Score", "type": "number" },
+            { "selector": "sessions", "text": "Sessions", "type": "number" },
+            { "selector": "logon_sec", "text": "Logon s", "type": "number" },
+            { "selector": "rtt_ms", "text": "RTT ms", "type": "number" },
+            { "selector": "errors", "text": "Errors", "type": "number" },
+            { "selector": "short_session_pct", "text": "Short %", "type": "number" },
+            { "selector": "profile_sec", "text": "Profile s", "type": "number" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Connection attempts vs connected",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 14 },
+      "datasource": { "type": "grafana-azure-monitor-datasource", "uid": "azmon-avd" },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 8 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "resources": ["$workspace"],
+            "resultFormat": "time_series",
+            "query": "WVDConnections\n| where $__timeFilter(TimeGenerated)\n| where State in (\"Started\", \"Connected\")\n| summarize Attempts = dcountif(CorrelationId, State == \"Started\"), Connected = dcountif(CorrelationId, State == \"Connected\") by bin(TimeGenerated, $__interval)\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Round-trip time (avg / P95 ms)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 14 },
+      "datasource": { "type": "grafana-azure-monitor-datasource", "uid": "azmon-avd" },
+      "fieldConfig": { "defaults": { "unit": "ms", "custom": { "fillOpacity": 8 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "resources": ["$workspace"],
+            "resultFormat": "time_series",
+            "query": "WVDConnectionNetworkData\n| where $__timeFilter(TimeGenerated)\n| summarize AvgRTT = round(avg(EstRoundTripTimeInMs), 1), P95RTT = round(percentile(EstRoundTripTimeInMs, 95), 1) by bin(TimeGenerated, $__interval)\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Errors over time",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 21 },
+      "datasource": { "type": "grafana-azure-monitor-datasource", "uid": "azmon-avd" },
+      "fieldConfig": { "defaults": { "custom": { "fillOpacity": 15 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "resources": ["$workspace"],
+            "resultFormat": "time_series",
+            "query": "WVDErrors\n| where $__timeFilter(TimeGenerated)\n| summarize Errors = count() by bin(TimeGenerated, $__interval)\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Logon / connect time (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 21 },
+      "datasource": { "type": "grafana-azure-monitor-datasource", "uid": "azmon-avd" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 8 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "resources": ["$workspace"],
+            "resultFormat": "time_series",
+            "query": "WVDConnections\n| where $__timeFilter(TimeGenerated)\n| where State in (\"Started\", \"Connected\")\n| summarize StartTime = minif(TimeGenerated, State == \"Started\"), ConnectTime = minif(TimeGenerated, State == \"Connected\") by CorrelationId\n| where isnotempty(ConnectTime) and isnotempty(StartTime)\n| extend Sec = datetime_diff('second', ConnectTime, StartTime)\n| where Sec between (0 .. 600)\n| summarize AvgConnectSec = round(avg(Sec), 1), P95ConnectSec = round(percentile(Sec, 95), 1) by bin(StartTime, $__interval)\n| project TimeGenerated = StartTime, AvgConnectSec, P95ConnectSec\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "FSLogix profile load (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 21 },
+      "datasource": { "type": "grafana-azure-monitor-datasource", "uid": "azmon-avd" },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "fillOpacity": 8 } }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "queryType": "Azure Log Analytics",
+          "azureLogAnalytics": {
+            "resources": ["$workspace"],
+            "resultFormat": "time_series",
+            "query": "WVDCheckpoints\n| where $__timeFilter(TimeGenerated)\n| where Name has \"Profile\" or Name has \"FSLogix\"\n| summarize StartT = min(TimeGenerated), EndT = max(TimeGenerated) by CorrelationId\n| extend Sec = datetime_diff('second', EndT, StartT)\n| where Sec between (0 .. 600)\n| summarize AvgProfileSec = round(avg(Sec), 1), P95ProfileSec = round(percentile(Sec, 95), 1) by bin(StartT, $__interval)\n| project TimeGenerated = StartT, AvgProfileSec, P95ProfileSec\n| order by TimeGenerated asc"
+          }
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "title": "Agent: input delay by user (ms)",
+      "type": "table",
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 28 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "${dex_url}/api/dex/agent?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "input_delay_by_user",
+          "columns": [
+            { "selector": "User", "text": "User", "type": "string" },
+            { "selector": "AvgInputDelayMs", "text": "Avg ms", "type": "number" },
+            { "selector": "MaxInputDelayMs", "text": "Max ms", "type": "number" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Agent: host resources & saturation",
+      "type": "table",
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 28 },
+      "datasource": { "type": "yesoreyeram-infinity-datasource", "uid": "infinity-avd" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "url": "${dex_url}/api/dex/agent?range=${dex_range}",
+          "url_options": { "method": "GET" },
+          "root_selector": "host_resources",
+          "columns": [
+            { "selector": "Host", "text": "Host", "type": "string" },
+            { "selector": "AvgCpuPct", "text": "CPU %", "type": "number" },
+            { "selector": "AvgCpuQueue", "text": "Queue", "type": "number" },
+            { "selector": "MinMemFreeMb", "text": "Free MB", "type": "number" },
+            { "selector": "AvgSmbMs", "text": "SMB ms", "type": "number" },
+            { "selector": "AvgLossPct", "text": "Loss %", "type": "number" },
+            { "selector": "UdpPct", "text": "UDP %", "type": "number" },
+            { "selector": "MinDiskFreePct", "text": "Free disk %", "type": "number" }
+          ]
+        }
+      ]
+    }
+  ]
+}
