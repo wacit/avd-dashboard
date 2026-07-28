@@ -278,6 +278,90 @@ def summaries(hours: int, hostpool: str | None) -> dict:
     return out
 
 
+def _short(name: str) -> str:
+    """Lowercase short form matching main._short_name (UPN/FQDN -> short)."""
+    n = (name or "").lower()
+    n = n.split("@")[0].split("\\")[-1]
+    return n.split(".")[0] if "." in n else n
+
+
+def user_detail(hours: int, hostpool: str | None, name: str) -> dict:
+    """Agent telemetry for one user (matched on the short name)."""
+    where, args = _range_clause(hours, hostpool)
+    short = _short(name)
+    uwhere = f"({where}) AND (lower(user) = ? OR lower(user) LIKE ?)"
+    uargs = args + [short, f"%\\{short}"]
+    bucket = "strftime('%Y-%m-%dT%H:%M:00Z', ts)" if hours <= 1 \
+        else "strftime('%Y-%m-%dT%H:00:00Z', ts)"
+    with _conn() as con:
+        input_ts = [dict(r) for r in con.execute(
+            f"""SELECT {bucket} AS TimeGenerated,
+                       ROUND(AVG(input_delay_ms), 1) AS AvgInputDelayMs,
+                       ROUND(MAX(input_delay_ms), 1) AS MaxInputDelayMs
+                FROM samples WHERE input_delay_ms IS NOT NULL AND {uwhere}
+                GROUP BY 1 ORDER BY 1""", uargs)]
+        sessions = [dict(r) for r in con.execute(
+            f"""SELECT host AS Host, MAX(state) AS State,
+                       ROUND(MAX(idle_min), 0) AS IdleMin,
+                       ROUND(MAX(mem_mb), 0) AS MemMb,
+                       MAX(top_cpu_proc) AS TopCpuApp, MAX(top_proc) AS TopMemApp,
+                       MAX(ts) AS LastSeen
+                FROM samples WHERE {uwhere}
+                GROUP BY host ORDER BY LastSeen DESC LIMIT 10""", uargs)]
+        crashes = [dict(r) for r in con.execute(
+            f"""SELECT ts AS TimeGenerated, kind AS Kind, source AS App
+                FROM events
+                WHERE kind IN ('app_crash','app_hang')
+                  AND ({where}) AND (lower(user) = ? OR lower(user) LIKE ?)
+                ORDER BY ts DESC LIMIT 10""", uargs)]
+        profile_loads = [dict(r) for r in con.execute(
+            f"""SELECT ts AS TimeGenerated,
+                       ROUND(duration_ms / 1000.0, 1) AS LoadSec, kind AS Kind
+                FROM events
+                WHERE kind IN ('profile_load','gpo_processing')
+                  AND ({where}) AND (lower(user) = ? OR lower(user) LIKE ?)
+                ORDER BY ts DESC LIMIT 10""", uargs)]
+    return {"input_delay_timeseries": input_ts, "sessions": sessions,
+            "crashes": crashes, "loads": profile_loads}
+
+
+def host_detail(hours: int, hostpool: str | None, name: str) -> dict:
+    """Agent telemetry for one session host (matched on the short name)."""
+    where, args = _range_clause(hours, hostpool)
+    short = _short(name)
+    hwhere = f"({where}) AND lower(host) LIKE ?"
+    hargs = args + [f"{short}%"]
+    bucket = "strftime('%Y-%m-%dT%H:%M:00Z', ts)" if hours <= 1 \
+        else "strftime('%Y-%m-%dT%H:00:00Z', ts)"
+    with _conn() as con:
+        resource_ts = [dict(r) for r in con.execute(
+            f"""SELECT {bucket} AS TimeGenerated,
+                       ROUND(AVG(host_cpu_pct), 1) AS AvgCpuPct,
+                       ROUND(AVG(cpu_queue), 1) AS AvgCpuQueue,
+                       ROUND(AVG(rtt_ms), 1) AS AvgRttMs,
+                       ROUND(AVG(fps), 1) AS AvgFps
+                FROM samples WHERE user IS NULL AND {hwhere}
+                GROUP BY 1 ORDER BY 1""", hargs)]
+        latest = con.execute(
+            f"""SELECT host, ts, host_cpu_pct, host_mem_free_mb, cpu_queue,
+                       smb_latency_ms, disk_free_pct, packet_loss_pct,
+                       udp_active, sessions_active, sessions_disconnected,
+                       unhealthy_services
+                FROM samples WHERE user IS NULL AND {hwhere}
+                ORDER BY ts DESC LIMIT 1""", hargs).fetchone()
+        sessions = [dict(r) for r in con.execute(
+            f"""SELECT user AS User, MAX(state) AS State,
+                       ROUND(MAX(idle_min), 0) AS IdleMin,
+                       ROUND(MAX(input_delay_ms), 1) AS InputDelayMs,
+                       ROUND(MAX(mem_mb), 0) AS MemMb,
+                       MAX(top_cpu_proc) AS TopCpuApp
+                FROM samples WHERE user IS NOT NULL AND {hwhere}
+                GROUP BY user ORDER BY MemMb DESC LIMIT 20""", hargs)]
+    return {"resource_timeseries": resource_ts,
+            "latest": dict(latest) if latest else None,
+            "sessions": sessions}
+
+
 def panels(hours: int, hostpool: str | None) -> dict:
     """Rows for the in-session telemetry panels on the dashboard."""
     where, args = _range_clause(hours, hostpool)

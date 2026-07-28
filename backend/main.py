@@ -19,7 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import connections, dex, queries as Q, store
-from .azure_client import RANGES, normalize_range, run_queries, run_query
+from .azure_client import RANGES, normalize_range, run_queries, run_query, safe_name
 from .config import settings
 
 app = FastAPI(title="AVD DEX Dashboard")
@@ -255,6 +255,67 @@ def dex_view(range: str = Query("24h"), hostpool: str | None = Query(None)):
 def dex_agent(range: str = Query("24h"), hostpool: str | None = Query(None)):
     rk = normalize_range(range)
     return store.panels(RANGE_HOURS.get(rk, 24), hostpool)
+
+
+@app.get("/api/dex/user")
+def dex_user_detail(
+    name: str = Query(...),
+    range: str = Query("24h"),
+    hostpool: str | None = Query(None),
+):
+    if not safe_name(name):
+        raise HTTPException(422, "Invalid user name.")
+    rk = normalize_range(range)
+    data, warnings = run_queries(
+        {
+            "sessions": Q.DETAIL_USER_SESSIONS,
+            "rtt": Q.DETAIL_USER_RTT,
+            "errors": Q.DETAIL_USER_ERRORS,
+            "profile": Q.DETAIL_USER_PROFILE,
+        },
+        rk, hostpool, params={"NAME": name},
+    )
+    return {
+        "name": name,
+        "sessions": data.get("sessions") or [],
+        "rtt": data.get("rtt") or [],
+        "errors": data.get("errors") or [],
+        "profile": data.get("profile") or [],
+        "agent": store.user_detail(RANGE_HOURS.get(rk, 24), hostpool, name),
+        "warnings": warnings,
+    }
+
+
+@app.get("/api/dex/host")
+def dex_host_detail(
+    name: str = Query(...),
+    range: str = Query("24h"),
+    hostpool: str | None = Query(None),
+):
+    if not safe_name(name):
+        raise HTTPException(422, "Invalid host name.")
+    rk = normalize_range(range)
+    short = name.split(".")[0].lower()
+    data, warnings = run_queries(
+        {
+            "users": Q.DETAIL_HOST_USERS,
+            "cpu": Q.DETAIL_HOST_CPU,
+            "mem": Q.DETAIL_HOST_MEM,
+            "rtt": Q.DETAIL_HOST_RTT,
+            "errors": Q.DETAIL_HOST_ERRORS,
+        },
+        rk, hostpool, params={"NAME": name, "SHORT": short},
+    )
+    return {
+        "name": name,
+        "users": data.get("users") or [],
+        "cpu": data.get("cpu") or [],
+        "mem": data.get("mem") or [],
+        "rtt": data.get("rtt") or [],
+        "errors": data.get("errors") or [],
+        "agent": store.host_detail(RANGE_HOURS.get(rk, 24), hostpool, name),
+        "warnings": warnings,
+    }
 
 
 # ------------------------------------------------------- agent ingest ----

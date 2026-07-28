@@ -64,6 +64,11 @@
   <main>
     <section class="panel-group">
       <h2>Digital experience drill-down</h2>
+      <p class="sect-desc">Users and hosts ranked worst experience first by the weighted 0–100 score
+        (90+ Excellent, 75+ Good, 60+ Fair, below 60 Poor). Click a name for a per-entity detail view;
+        hover any column header for what the metric means and its good/bad bands. The logon waterfall
+        shows the average seconds from connection start until each AVD checkpoint — the phase with the
+        biggest number is where logons lose time.</p>
       <div class="grid">
         <div class="card wide"><h3>Users ranked by experience (worst first)</h3><div id="dex_users" class="table-wrap tall"></div></div>
         <div class="card wide"><h3>Session hosts ranked by experience (worst first)</h3><div id="dex_hosts" class="table-wrap tall"></div></div>
@@ -74,6 +79,11 @@
 
     <section class="panel-group">
       <h2>In-session telemetry (AVD DEX agent)</h2>
+      <p class="sect-desc">Per-minute signals from the DEX agents that Log Analytics cannot see:
+        input delay (how laggy sessions feel — good ≤ 80ms), host saturation (CPU queue over ~2/core
+        means waiting threads), profile-share SMB latency, packet loss and UDP/Shortpath use, which
+        apps eat CPU/RAM, GPO logon cost, stopped AVD/FSLogix services, and disconnected or long-idle
+        sessions still holding memory.</p>
       <div id="agent_note" class="note hidden"></div>
       <div class="grid">
         <div class="card"><h3>Input delay by user (ms)</h3><canvas id="a_input_user"></canvas></div>
@@ -90,6 +100,8 @@
 
     <section class="panel-group">
       <h2>Connection health</h2>
+      <p class="sect-desc">Attempts vs successful connects (a persistent gap means failing
+        connections), concurrent users, and the client/transport mix.</p>
       <div class="grid">
         <div class="card"><h3>Attempts vs connected</h3><canvas id="c_conn"></canvas></div>
         <div class="card"><h3>Active users</h3><canvas id="c_users"></canvas></div>
@@ -100,6 +112,8 @@
 
     <section class="panel-group">
       <h2>Errors &amp; issues</h2>
+      <p class="sect-desc">AVD service errors: trend, most frequent symbolic codes, and the hosts
+        producing them. One dominant code usually points at a single root cause.</p>
       <div class="grid">
         <div class="card"><h3>Errors over time</h3><canvas id="e_ts"></canvas></div>
         <div class="card"><h3>Top error codes</h3><canvas id="e_codes"></canvas></div>
@@ -109,6 +123,9 @@
 
     <section class="panel-group">
       <h2>Host pool performance</h2>
+      <p class="sect-desc">Host load from the Perf table (needs the AMA performance DCR). Sustained
+        CPU above ~85% or low available memory degrades every session on that host; AVD agent health
+        shows hosts the broker considers unavailable.</p>
       <div class="grid">
         <div class="card"><h3>Avg CPU %</h3><canvas id="h_cpu"></canvas></div>
         <div class="card"><h3>Avg available memory (MB)</h3><canvas id="h_mem"></canvas></div>
@@ -120,6 +137,9 @@
 
     <section class="panel-group">
       <h2>User experience (network)</h2>
+      <p class="sect-desc">Network path quality per connection: round-trip time (users feel lag
+        above ~150ms), estimated bandwidth, and connect duration (avg / P95 — a large gap means
+        inconsistent logons).</p>
       <div class="grid">
         <div class="card"><h3>Round-trip time (ms)</h3><canvas id="u_rtt"></canvas></div>
         <div class="card"><h3>Available bandwidth (KBps)</h3><canvas id="u_bw"></canvas></div>
@@ -130,6 +150,9 @@
 
     <section class="panel-group">
       <h2>Azure file / FSLogix profile performance</h2>
+      <p class="sect-desc">FSLogix profile load timing from WVDCheckpoints — every second here adds
+        directly to logon time. Loads over ~30s usually mean profile-share latency (see SMB ms in the
+        agent section) or oversized profiles.</p>
       <div class="grid">
         <div class="card"><h3>Profile load time (s)</h3><canvas id="f_ts"></canvas></div>
         <div class="card"><h3>Profile load by host (s)</h3><canvas id="f_host"></canvas></div>

@@ -239,19 +239,35 @@ function renderFactors(env) {
   }).join("");
 }
 
-function renderScoreTable(containerId, rows, nameLabel) {
+const SCORE_HELP = {
+  score: "0-100 weighted experience score: 90+ Excellent, 75+ Good, 60+ Fair, below 60 Poor",
+  sessions: "Distinct connections in the selected time range",
+  logon: "Average seconds from connection start to connected (good <= 20s, bad >= 75s)",
+  rtt: "Average network round-trip time (good <= 60ms, bad >= 200ms)",
+  errors: "AVD service errors recorded in the range",
+  short: "Share of sessions under 5 minutes - disconnect/reconnect churn (good <= 5%)",
+  profile: "Average FSLogix profile load seconds (good <= 10s, bad >= 45s)",
+  input: "Average max input delay from the DEX agent (good <= 80ms); blank until the agent reports",
+  crashes: "App crashes + hangs seen by the DEX agent",
+};
+
+function renderScoreTable(containerId, rows, nameLabel, kind) {
   const el = document.getElementById(containerId);
   if (!rows || rows.length === 0) {
     el.innerHTML = '<div class="empty">No data for this range</div>';
     return;
   }
   const fmt = (v, d = 1) => (v == null ? "—" : Number(v).toFixed(d).replace(/\.0$/, ""));
-  const head = `<tr><th>${nameLabel}</th><th class="num">Score</th><th class="num">Sessions</th>` +
-    `<th class="num">Logon s</th><th class="num">RTT ms</th><th class="num">Errors</th>` +
-    `<th class="num">Short %</th><th class="num">Profile s</th><th class="num">Input ms</th>` +
-    `<th class="num">Crashes</th></tr>`;
+  const H = SCORE_HELP;
+  const head = `<tr><th title="Click a name for a detail view (opens the Ops OS)">${nameLabel}</th>` +
+    `<th class="num" title="${H.score}">Score</th><th class="num" title="${H.sessions}">Sessions</th>` +
+    `<th class="num" title="${H.logon}">Logon s</th><th class="num" title="${H.rtt}">RTT ms</th>` +
+    `<th class="num" title="${H.errors}">Errors</th><th class="num" title="${H.short}">Short %</th>` +
+    `<th class="num" title="${H.profile}">Profile s</th><th class="num" title="${H.input}">Input ms</th>` +
+    `<th class="num" title="${H.crashes}">Crashes</th></tr>`;
   const body = rows.map((r) =>
-    `<tr><td>${r.name}</td><td class="num">${chip(r.score)}</td>` +
+    `<tr><td><a class="drill" href="/os#${kind}=${encodeURIComponent(r.name)}">${r.name}</a></td>` +
+    `<td class="num">${chip(r.score)}</td>` +
     `<td class="num">${r.sessions ?? "—"}</td><td class="num">${fmt(r.logon_sec)}</td>` +
     `<td class="num">${fmt(r.rtt_ms)}</td><td class="num">${r.errors ?? "—"}</td>` +
     `<td class="num">${fmt(r.short_session_pct)}</td>` +
@@ -425,8 +441,8 @@ async function load() {
     renderFactors(dexData.environment);
     lineChart("dex_trend", dexData.trend, "TimeGenerated",
       [{ key: "Score", label: "Score", fill: true }], range, { yMax: 100 });
-    renderScoreTable("dex_users", dexData.users, "User");
-    renderScoreTable("dex_hosts", dexData.hosts, "Session host");
+    renderScoreTable("dex_users", dexData.users, "User", "user");
+    renderScoreTable("dex_hosts", dexData.hosts, "Session host", "host");
     barChart("dex_logon_phases", dexData.logon_phases, "Name", "AvgSec", "Avg s",
       [{ key: "P95Sec", label: "P95 s" }]);
     lineChart("dex_graphics", dexData.graphics, "TimeGenerated",

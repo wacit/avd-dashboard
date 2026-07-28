@@ -72,8 +72,24 @@ def _hostpool_clauses(hostpool: str | None) -> dict[str, str]:
     return {"HP": hp, "HPLET": hplet, "HPWHERE": hpwhere}
 
 
+# Entity names (UPNs, host FQDNs) embedded in detail queries. The charset
+# excludes quotes/backslashes so validated values are safe inside a KQL
+# string literal.
+_NAME_RE = re.compile(r"^[A-Za-z0-9@._ \-]{1,256}$")
+
+
+def safe_name(name: str | None) -> str | None:
+    """Return the name if it is safe to embed in KQL, else None."""
+    if name and _NAME_RE.match(name):
+        return name
+    return None
+
+
 def run_query(
-    kql: str, range_key: str, hostpool: str | None = None
+    kql: str,
+    range_key: str,
+    hostpool: str | None = None,
+    params: dict[str, str] | None = None,
 ) -> tuple[list[dict], str | None]:
     """Run a KQL query for the given range.
 
@@ -87,6 +103,10 @@ def run_query(
     query = kql.replace("{bin}", bin_size)
     for token, fragment in _hostpool_clauses(hostpool).items():
         query = query.replace("{" + token + "}", fragment)
+    for token, value in (params or {}).items():
+        if safe_name(value) is None:
+            return [], f"invalid value for {token}"
+        query = query.replace("{" + token + "}", value)
 
     ws = connections.workspace_id()
     if not ws:
@@ -116,7 +136,10 @@ def run_query(
 
 
 def run_queries(
-    specs: dict[str, str], range_key: str, hostpool: str | None = None
+    specs: dict[str, str],
+    range_key: str,
+    hostpool: str | None = None,
+    params: dict[str, str] | None = None,
 ) -> tuple[dict[str, list[dict] | None], list[str]]:
     """Run several named queries concurrently.
 
@@ -128,7 +151,7 @@ def run_queries(
     warnings: list[str] = []
     with ThreadPoolExecutor(max_workers=6) as ex:
         futures = {
-            name: ex.submit(run_query, kql, range_key, hostpool)
+            name: ex.submit(run_query, kql, range_key, hostpool, params)
             for name, kql in specs.items()
         }
         for name, fut in futures.items():

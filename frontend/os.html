@@ -160,6 +160,18 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .chip.warn { color: var(--warn); border-color: var(--warn); }
 .chip.bad { color: var(--bad); border-color: var(--bad); }
 .chip.na { color: var(--muted); border-color: var(--border); }
+a.drill { color: var(--accent); text-decoration: none; cursor: pointer; }
+a.drill:hover { text-decoration: underline; }
+.appdesc {
+  font-size: 12px; color: var(--muted); line-height: 1.5;
+  border-left: 3px solid var(--accent); padding: 4px 10px; margin: 0 0 12px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+th[title] { cursor: help; text-decoration: underline dotted; text-underline-offset: 3px; }
+.kv { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; margin-bottom: 6px; }
+.kv .item { background: var(--track); border-radius: 7px; padding: 7px 10px; font-size: 12px; }
+.kv .item b { display: block; font-size: 15px; margin-top: 2px; }
 .gauge-wrap { position: relative; width: 190px; margin: 6px auto 0; }
 .gauge-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
 .gauge-score { font-size: 40px; font-weight: 700; line-height: 1; }
@@ -374,9 +386,14 @@ function drawOrEmpty(winId, el, canvasId, rows, cfgFn) {
   }
   mkChart(winId, cv, cfgFn(rows));
 }
+function drillLink(kind, name) {
+  if (!name) return "—";
+  return `<a class="drill" href="#" data-kind="${kind}" data-name="${encodeURIComponent(name)}" title="Click for ${kind} detail">${name}</a>`;
+}
 function tableHTML(rows, cols) {
   if (!rows || rows.length === 0) return '<div class="empty">No data for this range</div>';
-  const head = cols.map((c) => `<th class="${c.num ? "num" : ""}">${c.label}</th>`).join("");
+  const head = cols.map((c) =>
+    `<th class="${c.num ? "num" : ""}"${c.help ? ` title="${c.help}"` : ""}>${c.label}</th>`).join("");
   const body = rows.map((r) =>
     "<tr>" + cols.map((c) => `<td class="${c.num ? "num" : ""}">${(c.fmt ? c.fmt(r[c.key], r) : r[c.key]) ?? "—"}</td>`).join("") + "</tr>"
   ).join("");
@@ -384,9 +401,35 @@ function tableHTML(rows, cols) {
 }
 
 /* ================= apps ================= */
+function scoreCols(kind) {
+  return [
+    { key: "name", label: kind === "user" ? "User" : "Session host",
+      fmt: (v) => drillLink(kind, v), help: "Click a name to open its detail window" },
+    { key: "score", label: "Score", num: true, fmt: (v) => chip(v),
+      help: "0-100 weighted experience score: 90+ Excellent, 75+ Good, 60+ Fair, below 60 Poor. Built from the factors to the right (see About for weights)." },
+    { key: "sessions", label: "Sessions", num: true,
+      help: "Distinct connections in the selected time range" },
+    { key: "logon_sec", label: "Logon s", num: true, fmt: (v) => fmt(v),
+      help: "Average seconds from connection start to connected. Good <= 20s, bad >= 75s." },
+    { key: "rtt_ms", label: "RTT ms", num: true, fmt: (v) => fmt(v),
+      help: "Average network round-trip time. Good <= 60ms, bad >= 200ms." },
+    { key: "errors", label: "Errors", num: true,
+      help: "AVD service errors recorded in the range (WVDErrors)" },
+    { key: "short_session_pct", label: "Short %", num: true, fmt: (v) => fmt(v),
+      help: "Share of sessions shorter than 5 minutes - disconnect/reconnect churn. Good <= 5%, bad >= 40%." },
+    { key: "profile_sec", label: "Profile s", num: true, fmt: (v) => fmt(v),
+      help: "Average FSLogix profile load seconds. Good <= 10s, bad >= 45s." },
+    { key: "input_delay_ms", label: "Input ms", num: true, fmt: (v) => fmt(v),
+      help: "Average max input delay from the DEX agent - how laggy typing/clicking feels. Good <= 80ms. Blank until the agent reports." },
+    { key: "app_crashes", label: "Crashes", num: true,
+      help: "App crashes + hangs seen by the DEX agent for this entity" },
+  ];
+}
+
 const APPS = {
   dex: {
-    title: "Experience Score", icon: "🎯", w: 380, h: 560,
+    title: "Experience Score", icon: "🎯", w: 380, h: 600,
+    desc: "The overall 0-100 experience score for the selected pool and range — a weighted blend of up to 14 factors from Log Analytics and the DEX agent. Each bar is one factor's sub-score; its label shows the raw value and source. Missing data drops a factor and reweights the rest.",
     render(el, id) {
       const env = (state.data.dex || {}).environment;
       const score = env && env.score;
@@ -414,7 +457,8 @@ const APPS = {
     },
   },
   trend: {
-    title: "Score Trend", icon: "📈", w: 560, h: 330,
+    title: "Score Trend", icon: "📈", w: 560, h: 360,
+    desc: "The environment score recomputed per time bucket — dips mark when experience degraded; correlate them with the Errors and Host Performance windows.",
     render(el, id) {
       el.innerHTML = chartBox("c_" + id, true);
       drawOrEmpty(id, el, "c_" + id, (state.data.dex || {}).trend,
@@ -423,37 +467,154 @@ const APPS = {
   },
   users: {
     title: "User Experience", icon: "👥", w: 720, h: 420,
+    desc: "Every user seen in the range, worst experience first. Click a user name to drill into their sessions, latency, errors and agent telemetry. Hover a column header for what the metric means and its good/bad bands.",
     render(el) {
-      el.innerHTML = tableHTML((state.data.dex || {}).users, [
-        { key: "name", label: "User" },
-        { key: "score", label: "Score", num: true, fmt: (v) => chip(v) },
-        { key: "sessions", label: "Sessions", num: true },
-        { key: "logon_sec", label: "Logon s", num: true, fmt: (v) => fmt(v) },
-        { key: "rtt_ms", label: "RTT ms", num: true, fmt: (v) => fmt(v) },
-        { key: "errors", label: "Errors", num: true },
-        { key: "short_session_pct", label: "Short %", num: true, fmt: (v) => fmt(v) },
-        { key: "profile_sec", label: "Profile s", num: true, fmt: (v) => fmt(v) },
-        { key: "input_delay_ms", label: "Input ms", num: true, fmt: (v) => fmt(v) },
-      ]);
+      el.innerHTML = tableHTML((state.data.dex || {}).users, scoreCols("user"));
     },
   },
   hosts: {
     title: "Host Experience", icon: "🖥️", w: 720, h: 420,
+    desc: "Session hosts ranked worst-first by the same factor model. Click a host name for its users, resource trend and latest agent snapshot. Hover a column header for metric definitions.",
     render(el) {
-      el.innerHTML = tableHTML((state.data.dex || {}).hosts, [
-        { key: "name", label: "Session host" },
-        { key: "score", label: "Score", num: true, fmt: (v) => chip(v) },
-        { key: "sessions", label: "Sessions", num: true },
-        { key: "logon_sec", label: "Logon s", num: true, fmt: (v) => fmt(v) },
-        { key: "rtt_ms", label: "RTT ms", num: true, fmt: (v) => fmt(v) },
-        { key: "errors", label: "Errors", num: true },
-        { key: "short_session_pct", label: "Short %", num: true, fmt: (v) => fmt(v) },
-        { key: "profile_sec", label: "Profile s", num: true, fmt: (v) => fmt(v) },
+      el.innerHTML = tableHTML((state.data.dex || {}).hosts, scoreCols("host"));
+    },
+  },
+  udetail: {
+    title: "User Detail", icon: "🔍", w: 700, h: 620,
+    render(el, id) {
+      const name = state.detailUser;
+      if (!name) {
+        el.innerHTML = '<div class="empty">Click a user name in the User Experience table to drill in.</div>';
+        return;
+      }
+      const d = state.udata;
+      if (!d || d.name !== name) {
+        el.innerHTML = `<div class="empty">Loading ${name}…</div>`;
+        getJSON(`/api/dex/user?name=${encodeURIComponent(name)}&range=${state.range}&hostpool=${encodeURIComponent(state.hostpool)}`)
+          .then((r) => { state.udata = r; if (state.detailUser === name && wins.udetail) renderApp("udetail"); })
+          .catch((e) => { el.innerHTML = `<div class="empty">${e.message}</div>`; });
+        return;
+      }
+      const ag = d.agent || {};
+      el.innerHTML = `
+        <div class="appdesc">Everything recorded for <b>${name}</b> in the selected range — connections and logons from Log Analytics plus per-minute DEX-agent telemetry where deployed.</div>
+        <h5 class="sect">Sessions</h5><div id="us_${id}"></div>
+        <h5 class="sect">Latency over time (ms)</h5>${chartBox("ur_" + id)}
+        <h5 class="sect">Input delay over time (agent, ms)</h5>${chartBox("ui_" + id)}
+        <h5 class="sect">Recent errors</h5><div id="ue_${id}"></div>
+        <h5 class="sect">Profile / logon loads</h5><div id="up_${id}"></div>
+        <h5 class="sect">Current agent view</h5><div id="ua_${id}"></div>
+        <h5 class="sect">App crashes &amp; hangs</h5><div id="uc_${id}"></div>`;
+      el.querySelector("#us_" + id).innerHTML = tableHTML(d.sessions, [
+        { key: "TimeGenerated", label: "Started", fmt: (v) => v ? new Date(v).toLocaleString() : "—" },
+        { key: "Host", label: "Host", fmt: (v) => drillLink("host", v) },
+        { key: "ConnectSec", label: "Connect s", num: true, help: "Seconds from start to connected" },
+        { key: "DurationMin", label: "Duration min", num: true, help: "Connected-to-completed; blank while still active" },
+        { key: "CType", label: "Transport", help: "AVD connection type" },
+        { key: "ClientOS", label: "Client OS" },
+      ]);
+      drawOrEmpty(id, el, "ur_" + id, d.rtt,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgRTT", label: "RTT ms", fill: true }]));
+      drawOrEmpty(id, el, "ui_" + id, ag.input_delay_timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgInputDelayMs", label: "Avg" }, { key: "MaxInputDelayMs", label: "Max" }]));
+      el.querySelector("#ue_" + id).innerHTML = tableHTML(d.errors, [
+        { key: "TimeGenerated", label: "Time", fmt: (v) => v ? new Date(v).toLocaleString() : "—" },
+        { key: "CodeSymbolic", label: "Code" }, { key: "Source", label: "Source" },
+        { key: "Message", label: "Message" },
+      ]);
+      const loads = [
+        ...(d.profile || []).map((p) => ({ TimeGenerated: p.TimeGenerated, Kind: "profile (LA)", LoadSec: p.ProfileLoadSec })),
+        ...(ag.loads || []).map((l) => ({ TimeGenerated: l.TimeGenerated, Kind: l.Kind, LoadSec: l.LoadSec })),
+      ];
+      el.querySelector("#up_" + id).innerHTML = tableHTML(loads, [
+        { key: "TimeGenerated", label: "Time", fmt: (v) => v ? new Date(v).toLocaleString() : "—" },
+        { key: "Kind", label: "Kind", help: "profile = FSLogix load; gpo_processing = group policy at logon" },
+        { key: "LoadSec", label: "Seconds", num: true },
+      ]);
+      el.querySelector("#ua_" + id).innerHTML = tableHTML(ag.sessions, [
+        { key: "Host", label: "Host", fmt: (v) => drillLink("host", v) },
+        { key: "State", label: "State" },
+        { key: "IdleMin", label: "Idle min", num: true },
+        { key: "MemMb", label: "Mem MB", num: true },
+        { key: "TopCpuApp", label: "Top CPU app" }, { key: "TopMemApp", label: "Top mem app" },
+      ]);
+      el.querySelector("#uc_" + id).innerHTML = tableHTML(ag.crashes, [
+        { key: "TimeGenerated", label: "Time", fmt: (v) => v ? new Date(v).toLocaleString() : "—" },
+        { key: "Kind", label: "Kind" }, { key: "App", label: "Application" },
+      ]);
+    },
+  },
+  hdetail: {
+    title: "Host Detail", icon: "🔎", w: 700, h: 620,
+    render(el, id) {
+      const name = state.detailHost;
+      if (!name) {
+        el.innerHTML = '<div class="empty">Click a host name in the Host Experience table to drill in.</div>';
+        return;
+      }
+      const d = state.hdata;
+      if (!d || d.name !== name) {
+        el.innerHTML = `<div class="empty">Loading ${name}…</div>`;
+        getJSON(`/api/dex/host?name=${encodeURIComponent(name)}&range=${state.range}&hostpool=${encodeURIComponent(state.hostpool)}`)
+          .then((r) => { state.hdata = r; if (state.detailHost === name && wins.hdetail) renderApp("hdetail"); })
+          .catch((e) => { el.innerHTML = `<div class="empty">${e.message}</div>`; });
+        return;
+      }
+      const ag = d.agent || {};
+      const L = ag.latest;
+      const kv = L ? `<div class="kv">
+          <div class="item">CPU %<b>${L.host_cpu_pct ?? "—"}</b></div>
+          <div class="item">Free mem MB<b>${L.host_mem_free_mb ?? "—"}</b></div>
+          <div class="item">CPU queue<b>${L.cpu_queue ?? "—"}</b></div>
+          <div class="item">SMB ms<b>${L.smb_latency_ms ?? "—"}</b></div>
+          <div class="item">Free disk %<b>${L.disk_free_pct ?? "—"}</b></div>
+          <div class="item">Loss %<b>${L.packet_loss_pct ?? "—"}</b></div>
+          <div class="item">UDP<b>${L.udp_active ? "yes" : "no"}</b></div>
+          <div class="item">Active / Disc<b>${L.sessions_active ?? "—"} / ${L.sessions_disconnected ?? "—"}</b></div>
+          <div class="item">Stopped services<b>${L.unhealthy_services ?? "none"}</b></div>
+        </div>` : "";
+      el.innerHTML = `
+        <div class="appdesc">Health and load for <b>${name}</b> — who is on it, resource trend, and the latest DEX-agent snapshot.</div>
+        ${L ? '<h5 class="sect">Latest agent snapshot</h5>' + kv : ""}
+        <h5 class="sect">Users on this host</h5><div id="hu_${id}"></div>
+        <h5 class="sect">CPU % (Perf)</h5>${chartBox("hc_" + id)}
+        <h5 class="sect">Available memory MB (Perf)</h5>${chartBox("hm_" + id)}
+        <h5 class="sect">Latency over time (ms)</h5>${chartBox("hr_" + id)}
+        <h5 class="sect">Agent resource trend</h5>${chartBox("ha_" + id)}
+        <h5 class="sect">Current sessions (agent)</h5><div id="hs_${id}"></div>
+        <h5 class="sect">Recent errors</h5><div id="he_${id}"></div>`;
+      el.querySelector("#hu_" + id).innerHTML = tableHTML(d.users, [
+        { key: "UserName", label: "User", fmt: (v) => drillLink("user", v) },
+        { key: "Sessions", label: "Sessions", num: true },
+        { key: "LastSeen", label: "Last connected", fmt: (v) => v ? new Date(v).toLocaleString() : "—" },
+      ]);
+      drawOrEmpty(id, el, "hc_" + id, d.cpu,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgCPU", label: "CPU %", fill: true }]));
+      drawOrEmpty(id, el, "hm_" + id, d.mem,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgAvailMB", label: "MB", fill: true }]));
+      drawOrEmpty(id, el, "hr_" + id, d.rtt,
+        (r) => lineCfg(r, "TimeGenerated", [{ key: "AvgRTT", label: "RTT ms", fill: true }]));
+      drawOrEmpty(id, el, "ha_" + id, ag.resource_timeseries,
+        (r) => lineCfg(r, "TimeGenerated", [
+          { key: "AvgCpuPct", label: "CPU %" }, { key: "AvgRttMs", label: "RTT ms" },
+          { key: "AvgFps", label: "FPS", y2: true }]));
+      el.querySelector("#hs_" + id).innerHTML = tableHTML(ag.sessions, [
+        { key: "User", label: "User" }, { key: "State", label: "State" },
+        { key: "IdleMin", label: "Idle min", num: true },
+        { key: "InputDelayMs", label: "Input ms", num: true },
+        { key: "MemMb", label: "Mem MB", num: true },
+        { key: "TopCpuApp", label: "Top CPU app" },
+      ]);
+      el.querySelector("#he_" + id).innerHTML = tableHTML(d.errors, [
+        { key: "TimeGenerated", label: "Time", fmt: (v) => v ? new Date(v).toLocaleString() : "—" },
+        { key: "UserName", label: "User" },
+        { key: "CodeSymbolic", label: "Code" }, { key: "Source", label: "Source" },
       ]);
     },
   },
   logon: {
-    title: "Logon Waterfall", icon: "⏱️", w: 560, h: 380,
+    title: "Logon Waterfall", icon: "⏱️", w: 560, h: 420,
+    desc: "Average seconds from connection start until each AVD checkpoint fired — shows which logon phase (brokering, profile load, shell start) eats the time. P95 is the worst 5% of logons; a large Avg-to-P95 gap means inconsistent logons.",
     render(el, id) {
       el.innerHTML = chartBox("c_" + id, true);
       drawOrEmpty(id, el, "c_" + id, (state.data.dex || {}).logon_phases,
@@ -461,7 +622,8 @@ const APPS = {
     },
   },
   agent: {
-    title: "Agent Telemetry", icon: "🛰️", w: 700, h: 560,
+    title: "Agent Telemetry", icon: "🛰️", w: 700, h: 600,
+    desc: "Per-minute in-session telemetry from the DEX agents on your session hosts — the signals Log Analytics cannot see: input delay (how laggy sessions feel), host saturation (CPU queue, memory commit), storage and profile-share latency, packet loss and UDP use, which apps eat resources, GPO logon cost, stopped AVD/FSLogix services, and idle/disconnected sessions holding capacity.",
     render(el, id) {
       const a = state.data.dexagent || {};
       const st = a.status || {};
@@ -520,7 +682,8 @@ const APPS = {
     },
   },
   network: {
-    title: "Network & Graphics", icon: "📡", w: 620, h: 560,
+    title: "Network & Graphics", icon: "📡", w: 620, h: 600,
+    desc: "Network path quality from AVD Insights: round-trip time (avg and P95 — above ~150ms users feel lag) and estimated bandwidth. The graphics panel needs the preview WVDConnectionGraphicsDataPreview table; FPS below ~15 or rising end-to-end delay means choppy screens.",
     render(el, id) {
       const ux = state.data.ux || {};
       el.innerHTML =
@@ -536,7 +699,8 @@ const APPS = {
     },
   },
   connections: {
-    title: "Connections", icon: "🔌", w: 620, h: 560,
+    title: "Connections", icon: "🔌", w: 620, h: 600,
+    desc: "Connection volume and outcome: attempts vs successful connects (a persistent gap = failing connections), concurrent users over time, and how long connecting took (avg / P95 seconds).",
     render(el, id) {
       const c = state.data.conn || {};
       el.innerHTML =
@@ -552,7 +716,8 @@ const APPS = {
     },
   },
   errors: {
-    title: "Errors", icon: "⚠️", w: 600, h: 540,
+    title: "Errors", icon: "⚠️", w: 600, h: 580,
+    desc: "AVD service errors (WVDErrors): volume over time and the most frequent symbolic codes. Look codes up in the detail windows or Microsoft's AVD error reference; a single dominant code usually points at one root cause.",
     render(el, id) {
       const e = state.data.err || {};
       el.innerHTML =
@@ -565,7 +730,8 @@ const APPS = {
     },
   },
   hostperf: {
-    title: "Host Performance", icon: "⚙️", w: 640, h: 560,
+    title: "Host Performance", icon: "⚙️", w: 640, h: 600,
+    desc: "Session-host load from the Perf table (requires the AMA performance DCR): pool-wide CPU and available memory, plus sessions per host. Sustained CPU above ~85% or free memory under ~1GB per session degrades everyone on that host.",
     render(el, id) {
       const h = state.data.host || {};
       el.innerHTML =
@@ -584,7 +750,8 @@ const APPS = {
     },
   },
   profile: {
-    title: "FSLogix Profiles", icon: "📁", w: 600, h: 540,
+    title: "FSLogix Profiles", icon: "📁", w: 600, h: 580,
+    desc: "FSLogix profile load timing derived from WVDCheckpoints — every second here is a second added to the user's logon. Loads over ~30s usually mean profile-share latency or oversized profiles; check SMB ms in Agent Telemetry.",
     render(el, id) {
       const f = state.data.files || {};
       el.innerHTML =
@@ -598,6 +765,7 @@ const APPS = {
   },
   connect: {
     title: "Connections", icon: "🔗", w: 420, h: 560,
+    desc: "Link this dashboard to a tenant and choose the Log Analytics workspace it reads. Sign-in is cached, so this is a one-time setup per instance.",
     render(el, id) {
       const c = state.connect || {};
       const flow = state.connectFlow || {};
@@ -865,7 +1033,32 @@ function renderApp(id) {
   if (!w || w.minned) return;
   destroyCharts(id);
   APPS[id].render(w.body, id);
+  if (APPS[id].desc) {
+    w.body.insertAdjacentHTML("afterbegin", `<div class="appdesc">${APPS[id].desc}</div>`);
+  }
 }
+
+/* ---- entity drill-down ---- */
+function openDetail(kind, name) {
+  if (kind === "user") {
+    state.detailUser = name;
+    state.udata = null;
+    openApp("udetail");
+    wins.udetail.el.querySelector(".t-title").textContent = "User: " + name;
+  } else {
+    state.detailHost = name;
+    state.hdata = null;
+    openApp("hdetail");
+    wins.hdetail.el.querySelector(".t-title").textContent = "Host: " + name;
+  }
+}
+document.addEventListener("click", (e) => {
+  const d = e.target.closest("a.drill");
+  if (d) {
+    e.preventDefault();
+    openDetail(d.dataset.kind, decodeURIComponent(d.dataset.name));
+  }
+});
 function rerenderAll() { Object.keys(wins).forEach(renderApp); }
 
 /* ================= shell chrome ================= */
@@ -923,6 +1116,9 @@ async function refresh() {
     host: `/api/hostpool?${qs}`, ux: `/api/ux?${qs}`, files: `/api/files?${qs}`,
   };
   const keys = Object.keys(endpoints);
+  // Invalidate open drill-down caches so they refetch with fresh data.
+  state.udata = null;
+  state.hdata = null;
   const results = await Promise.allSettled(keys.map((k) => getJSON(endpoints[k])));
   keys.forEach((k, i) => {
     if (results[i].status === "fulfilled") state.data[k] = results[i].value;
@@ -982,7 +1178,10 @@ setInterval(() => {
       openApp("connect");
     }
   } catch (e) {}
-  if (window.location.hash === "#connections") openApp("connect");
+  const hash = window.location.hash;
+  if (hash === "#connections") openApp("connect");
+  else if (hash.startsWith("#user=")) openDetail("user", decodeURIComponent(hash.slice(6)));
+  else if (hash.startsWith("#host=")) openDetail("host", decodeURIComponent(hash.slice(6)));
   try {
     const hp = await getJSON("/api/hostpools");
     state.hostpools = hp.hostpools || [];

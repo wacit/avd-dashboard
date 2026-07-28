@@ -424,6 +424,110 @@ WVDAgentHealthStatus
 | order by Hosts desc
 """
 
+# ---------- Entity drill-down (user / host detail windows) ----------
+# {NAME} / {SHORT} are validated by azure_client.safe_name before being
+# embedded (charset excludes quotes and backslashes).
+
+DETAIL_USER_SESSIONS = """
+WVDConnections
+{HP}
+| where UserName =~ "{NAME}"
+| extend ClientOS_ = tostring(column_ifexists("ClientOS", ""))
+| summarize
+    StartT = minif(TimeGenerated, State == "Started"),
+    ConnT  = minif(TimeGenerated, State == "Connected"),
+    EndT   = maxif(TimeGenerated, State == "Completed"),
+    Host   = anyif(SessionHostName, isnotempty(SessionHostName)),
+    CType  = any(ConnectionType),
+    ClientOS = any(ClientOS_)
+  by CorrelationId
+| extend ConnectSec = iif(isnotempty(StartT) and isnotempty(ConnT),
+    datetime_diff('second', ConnT, StartT), int(null))
+| extend DurationMin = iif(isnotempty(ConnT) and isnotempty(EndT),
+    datetime_diff('minute', EndT, ConnT), long(null))
+| project TimeGenerated = coalesce(StartT, ConnT), Host, ConnectSec,
+    DurationMin, CType, ClientOS
+| top 25 by TimeGenerated desc
+"""
+
+DETAIL_USER_RTT = """
+WVDConnectionNetworkData
+{HP}
+| join kind=inner (
+    WVDConnections | where UserName =~ "{NAME}" | distinct CorrelationId
+  ) on CorrelationId
+| summarize AvgRTT = round(avg(EstRoundTripTimeInMs), 1) by bin(TimeGenerated, {bin})
+| order by TimeGenerated asc
+"""
+
+DETAIL_USER_ERRORS = """
+WVDErrors
+{HP}
+| where UserName =~ "{NAME}"
+| project TimeGenerated, CodeSymbolic, Source, Message = substring(Message, 0, 120)
+| top 15 by TimeGenerated desc
+"""
+
+DETAIL_USER_PROFILE = """
+WVDCheckpoints
+{HP}
+| where Name has "Profile" or Name has "FSLogix"
+| join kind=inner (
+    WVDConnections | where UserName =~ "{NAME}" | distinct CorrelationId
+  ) on CorrelationId
+| summarize StartT = min(TimeGenerated), EndT = max(TimeGenerated) by CorrelationId
+| extend ProfileLoadSec = datetime_diff('second', EndT, StartT)
+| where ProfileLoadSec between (0 .. 600)
+| project TimeGenerated = StartT, ProfileLoadSec
+| top 15 by TimeGenerated desc
+"""
+
+DETAIL_HOST_USERS = """
+WVDConnections
+{HP}
+| where SessionHostName =~ "{NAME}"
+| where State == "Connected" and isnotempty(UserName)
+| summarize Sessions = dcount(CorrelationId), LastSeen = max(TimeGenerated) by UserName
+| top 20 by Sessions desc
+"""
+
+DETAIL_HOST_CPU = """
+Perf
+| where ObjectName == "Processor" and CounterName == "% Processor Time"
+        and InstanceName == "_Total"
+| where tolower(tostring(split(Computer, '.')[0])) == "{SHORT}"
+| summarize AvgCPU = round(avg(CounterValue), 1) by bin(TimeGenerated, {bin})
+| order by TimeGenerated asc
+"""
+
+DETAIL_HOST_MEM = """
+Perf
+| where CounterName == "Available MBytes"
+| where tolower(tostring(split(Computer, '.')[0])) == "{SHORT}"
+| summarize AvgAvailMB = round(avg(CounterValue), 0) by bin(TimeGenerated, {bin})
+| order by TimeGenerated asc
+"""
+
+DETAIL_HOST_RTT = """
+WVDConnectionNetworkData
+{HP}
+| join kind=inner (
+    WVDConnections | where SessionHostName =~ "{NAME}" | distinct CorrelationId
+  ) on CorrelationId
+| summarize AvgRTT = round(avg(EstRoundTripTimeInMs), 1) by bin(TimeGenerated, {bin})
+| order by TimeGenerated asc
+"""
+
+DETAIL_HOST_ERRORS = """
+WVDErrors
+{HP}
+| join kind=inner (
+    WVDConnections | where SessionHostName =~ "{NAME}" | distinct CorrelationId
+  ) on CorrelationId
+| project TimeGenerated, UserName, CodeSymbolic, Source
+| top 15 by TimeGenerated desc
+"""
+
 # ---------- Overview KPIs (single-value scalars) ----------
 
 KPI_CONNECTIONS = """
