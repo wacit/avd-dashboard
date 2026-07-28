@@ -1,0 +1,2 @@
+# Shell scripts must stay LF - they run on Linux (Proxmox/LXC)
+*.sh text eol=lf
