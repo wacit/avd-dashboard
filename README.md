@@ -159,13 +159,17 @@ perf counters and event logs — no services, no external dependencies.
 Failed uploads spool to `C:\Program Files\AvdDexAgent\spool` and retry.
 Uninstall with `Install-AvdDexAgent.ps1 -Uninstall`.
 
-## Onboarding a tenant
+## Runbooks
 
-Follow **[docs/Tenant-Onboarding-Runbook.html](docs/Tenant-Onboarding-Runbook.html)**
-(also served at `/runbook`, linked from the OS Settings app) — phases 0–5
-per tenant: prerequisites, server install, tenant linking, workspace
-selection, DEX agent rollout, verification, plus multi-tenant layout and
-troubleshooting.
+- **Onboarding** — [docs/Tenant-Onboarding-Runbook.html](docs/Tenant-Onboarding-Runbook.html)
+  (served at `/runbook`): phases 0–5 per tenant — prerequisites, server
+  install, tenant linking, workspace selection, DEX agent rollout,
+  verification, multi-tenant layout, troubleshooting.
+- **Operations & triage** — [docs/DEX-Operations-Runbook.html](docs/DEX-Operations-Runbook.html)
+  (served at `/runbook-ops`): daily 5-minute check, how to read the score,
+  five triage playbooks (slow session, slow logons, disconnects, one bad
+  host, choppy screens), alert responses, weekly hygiene checklist, metric
+  glossary, maintenance tasks. Both are linked from the OS Settings app.
 
 ## Linking your tenant from the UI (Connections app)
 

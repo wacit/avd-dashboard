@@ -532,4 +532,12 @@ def runbook():
     )
 
 
+@app.get("/runbook-ops")
+def runbook_ops():
+    """Operations & triage runbook (docs/DEX-Operations-Runbook.html)."""
+    return FileResponse(
+        FRONTEND_DIR.parent / "docs" / "DEX-Operations-Runbook.html"
+    )
+
+
 app.mount("/", StaticFiles(directory=FRONTEND_DIR), name="static")

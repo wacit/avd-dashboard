@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AVD DEX Dashboard — Operations &amp; Triage Runbook</title>
+<style>
+:root {
+  --bg: #0f172a; --panel: #1e293b; --card: #243044; --text: #e2e8f0;
+  --muted: #94a3b8; --accent: #38bdf8; --ok: #34d399; --warn: #fbbf24;
+  --bad: #f87171; --border: #334155; --code: #0b1120;
+}
+[data-theme="light"] {
+  --bg: #f1f5f9; --panel: #ffffff; --card: #f8fafc; --text: #0f172a;
+  --muted: #64748b; --accent: #0284c7; --ok: #059669; --warn: #b45309;
+  --bad: #dc2626; --border: #e2e8f0; --code: #f1f5f9;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; font-family: "Segoe UI", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); line-height: 1.55;
+}
+header {
+  position: sticky; top: 0; z-index: 10;
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 14px 28px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
+header h1 { font-size: 18px; margin: 0; }
+header .sub { font-size: 12px; color: var(--muted); }
+#theme {
+  background: var(--card); color: var(--text); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px; font-size: 14px; cursor: pointer;
+}
+#theme:hover { border-color: var(--accent); }
+main { max-width: 1000px; margin: 0 auto; padding: 24px 28px 80px; }
+h2 {
+  font-size: 17px; color: var(--accent); margin: 38px 0 12px;
+  border-bottom: 1px solid var(--border); padding-bottom: 6px;
+}
+h3 { font-size: 14.5px; margin: 22px 0 8px; }
+p, li { font-size: 14px; }
+code {
+  background: var(--code); border: 1px solid var(--border); border-radius: 4px;
+  padding: 1px 5px; font-size: 12.5px; font-family: Consolas, monospace;
+}
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 10px 0 18px; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.card {
+  background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  padding: 14px 18px; margin: 14px 0;
+}
+.callout { border-left: 4px solid var(--accent); }
+.callout.warn { border-left-color: var(--warn); }
+.callout b:first-child { color: var(--accent); }
+.callout.warn b:first-child { color: var(--warn); }
+ol.steps > li { margin: 10px 0; }
+ul.check { list-style: none; padding-left: 4px; }
+ul.check li { margin: 7px 0; }
+ul.check li::before { content: "☐ "; color: var(--accent); font-size: 15px; }
+.pill {
+  display: inline-block; border: 1px solid; border-radius: 999px;
+  padding: 0 9px; font-size: 11.5px; font-weight: 600;
+}
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.bad { color: var(--bad); border-color: var(--bad); }
+.toc { columns: 2; font-size: 13.5px; }
+.toc a { color: var(--accent); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+.path { font-size: 13px; color: var(--muted); }
+.path b { color: var(--text); }
+@media print {
+  header { position: static; } #theme { display: none; }
+  body { background: #fff; color: #000; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>AVD DEX Dashboard — Operations &amp; Triage Runbook</h1>
+    <div class="sub">Day-2 guide: reading the score, triaging complaints, weekly hygiene · rev 2026-07</div>
+  </div>
+  <button id="theme" title="Toggle light/dark">🌓 Theme</button>
+</header>
+<main>
+
+<div class="card callout">
+  <b>Scope.</b> This runbook covers <b>operating</b> the dashboard once a
+  tenant is linked and agents are deployed. For setup, use the companion
+  <a href="Tenant-Onboarding-Runbook.html" style="color:var(--accent)">Tenant
+  Onboarding Runbook</a> (served at <code>/runbook</code>). This one is at
+  <code>/runbook-ops</code>. Windows referenced below are apps in the Ops OS
+  (<code>/os</code>); the classic view (<code>/</code>) shows the same data
+  on one page.
+</div>
+
+<h2 id="toc">Contents</h2>
+<div class="toc">
+  <div><a href="#daily">1 · Daily 5-minute check</a></div>
+  <div><a href="#score">2 · Reading the experience score</a></div>
+  <div><a href="#t-slow">3 · Playbook: "my session is slow"</a></div>
+  <div><a href="#t-logon">4 · Playbook: slow logons</a></div>
+  <div><a href="#t-drops">5 · Playbook: disconnects / drops</a></div>
+  <div><a href="#t-host">6 · Playbook: one bad host</a></div>
+  <div><a href="#t-choppy">7 · Playbook: choppy / frozen screens</a></div>
+  <div><a href="#alerts">8 · Alert responses</a></div>
+  <div><a href="#weekly">9 · Weekly hygiene checklist</a></div>
+  <div><a href="#glossary">10 · Metric glossary</a></div>
+  <div><a href="#maint">11 · Maintenance tasks</a></div>
+</div>
+
+<h2 id="daily">1 · Daily 5-minute check</h2>
+<ol class="steps">
+  <li>Open <code>/os</code>. Read the <b>DEX pill</b> in the taskbar tray:
+      <span class="pill ok">80+</span> fine ·
+      <span class="pill warn">60–79</span> look ·
+      <span class="pill bad">&lt;60</span> act.</li>
+  <li><b>Score Trend</b> — any dip overnight? Note the time bucket; you will
+      correlate it in Errors / Host Performance.</li>
+  <li><b>User Experience</b> — the top of the list is the worst experience in
+      the environment. Anyone under 60? Click their name (Section 3).</li>
+  <li><b>Agent Telemetry</b> — feed line should say all hosts reporting.
+      Fewer hosts than expected → Section 11. Check <b>Unhealthy services</b>
+      (should be empty) and <b>Disconnected / long-idle sessions</b>.</li>
+  <li>Classic view alert strip (<code>/</code>) — any WARN/BAD KPIs → Section 8.</li>
+</ol>
+
+<h2 id="score">2 · Reading the experience score</h2>
+<p>Every user, host, and the environment gets a 0–100 score: a weighted
+average of factor sub-scores. Each factor maps its raw metric linearly from
+its <b>good</b> band (100) to its <b>bad</b> band (0). Missing data drops the
+factor and reweights the rest — so a score built only from Log Analytics is
+valid, and gets richer once agents report.</p>
+<table>
+  <tr><th>Grade</th><th>Score</th><th>Meaning</th></tr>
+  <tr><td><span class="pill ok">Excellent</span></td><td>90–100</td><td>Users are not noticing the platform.</td></tr>
+  <tr><td><span class="pill ok">Good</span></td><td>75–89</td><td>Minor friction; watch the worst factor.</td></tr>
+  <tr><td><span class="pill warn">Fair</span></td><td>60–74</td><td>Users feel it. Triage the red factors this week.</td></tr>
+  <tr><td><span class="pill bad">Poor</span></td><td>&lt;60</td><td>Actively bad experience. Triage today.</td></tr>
+</table>
+<table>
+  <tr><th>Factor</th><th>Source</th><th>Good</th><th>Bad</th><th>Weight</th><th>When it is red, think…</th></tr>
+  <tr><td>Connection reliability</td><td>Logs</td><td>99%</td><td>85%</td><td>20</td><td>Broker/gateway issues, hosts unavailable, client-side failures</td></tr>
+  <tr><td>Session latency (RTT)</td><td>Logs</td><td>60 ms</td><td>200 ms</td><td>20</td><td>User ISP/Wi-Fi, region mismatch, TCP fallback</td></tr>
+  <tr><td>Logon speed</td><td>Logs</td><td>20 s</td><td>75 s</td><td>15</td><td>Profile load, GPO, host CPU at logon storm</td></tr>
+  <tr><td>Profile load (FSLogix)</td><td>Logs</td><td>10 s</td><td>45 s</td><td>10</td><td>Share latency, profile bloat, throttled storage</td></tr>
+  <tr><td>Error rate</td><td>Logs</td><td>0.1/conn</td><td>2/conn</td><td>10</td><td>Check top symbolic codes — usually one root cause</td></tr>
+  <tr><td>Connection stability (short-session %)</td><td>Logs</td><td>5%</td><td>40%</td><td>10</td><td>Network drops, idle policies logging users off, crashes</td></tr>
+  <tr><td>Input responsiveness</td><td>Agent</td><td>80 ms</td><td>600 ms</td><td>10</td><td>Host saturation — check CPU queue and top apps</td></tr>
+  <tr><td>Frame rate</td><td>Agent</td><td>24 fps</td><td>8 fps</td><td>5</td><td>Encoder starved (CPU/GPU) or network can't carry frames</td></tr>
+  <tr><td>Host CPU pressure</td><td>Agent</td><td>60%</td><td>95%</td><td>5</td><td>Density too high, runaway process</td></tr>
+  <tr><td>App crashes / hangs</td><td>Agent</td><td>0</td><td>5</td><td>5</td><td>Bad app version, plugin, profile corruption</td></tr>
+  <tr><td>Packet loss</td><td>Agent</td><td>0.5%</td><td>5%</td><td>5</td><td>Wi-Fi, VPN, congested egress</td></tr>
+  <tr><td>Profile share latency (SMB)</td><td>Agent</td><td>20 ms</td><td>200 ms</td><td>5</td><td>Azure Files tier/IOPS, region, throttling</td></tr>
+  <tr><td>Host saturation (CPU queue)</td><td>Agent</td><td>2</td><td>12</td><td>5</td><td>Threads waiting for CPU even if CPU% looks OK</td></tr>
+</table>
+<p>Weights are tunable in <code>backend/dex.py</code>. Hover any column
+header in the experience tables for the same definitions in-app.</p>
+
+<h2 id="t-slow">3 · Playbook: "my session is slow"</h2>
+<p class="path"><b>Path:</b> User Experience → click the user → User Detail window</p>
+<ol class="steps">
+  <li>Find the user (they are probably near the top). Note which columns are
+      out of band — the score chip tells you <i>that</i> it's bad; the columns
+      tell you <i>why</i>.</li>
+  <li><b>RTT high (&gt;150 ms)?</b> Network path. In User Detail, check the
+      latency trend: constant = distance/ISP; spiky = Wi-Fi or congestion.
+      Cross-check <b>UDP %</b> and <b>Loss %</b> for their host in Agent
+      Telemetry — TCP-only means Shortpath is blocked and adds latency.</li>
+  <li><b>Input delay high but RTT fine?</b> The host, not the network. Open
+      the session's host (click it inside User Detail) — look at CPU queue,
+      CPU %, and <b>Top CPU app</b>. A saturated host or one greedy app
+      (CAD, browser tabs, AV scan) is the usual cause.</li>
+  <li><b>Crashes listed?</b> The app is the problem, not the platform —
+      note the faulting application and version.</li>
+  <li><b>Logon slow too?</b> Follow Section 4 for that user's profile/GPO rows.</li>
+</ol>
+
+<h2 id="t-logon">4 · Playbook: slow logons</h2>
+<p class="path"><b>Path:</b> Logon Waterfall + FSLogix Profiles + Agent Telemetry (GPO)</p>
+<ol class="steps">
+  <li><b>Logon Waterfall</b> — read top-down: the milestone where average
+      seconds jumps is the phase to blame. Big Avg→P95 gap = inconsistent,
+      usually storage or a subset of users.</li>
+  <li><b>Profile the profile</b> — FSLogix Profiles window: loads over ~30 s
+      are storage. Check <b>SMB ms</b> per host in Agent Telemetry
+      (good ≤ 20 ms). High SMB latency on all hosts = share/tier issue; on
+      one host = that host's networking.</li>
+  <li><b>GPO processing by user</b> (Agent Telemetry) — anything over ~15 s
+      is worth a GPO review (drive mappings, WMI filters, printers).</li>
+  <li><b>Logon storms</b> — if logons are slow only at shift start, check
+      Host Performance CPU at that time bucket; consider staggering or
+      pre-warming autoscale.</li>
+  <li>Per-user: their User Detail window lists each session's
+      <b>Connect s</b> and every profile/GPO load with timestamps.</li>
+</ol>
+
+<h2 id="t-drops">5 · Playbook: disconnects / drops</h2>
+<p class="path"><b>Path:</b> Short % column + Errors + Agent Telemetry network table</p>
+<ol class="steps">
+  <li><b>Short %</b> in the experience tables — sessions under 5 minutes.
+      One user high = their network. Many users high = platform.</li>
+  <li><b>Errors window</b> — dominant symbolic code? Gateway/broker codes
+      cluster when the platform is at fault.</li>
+  <li><b>Loss % / Retrans/s / UDP %</b> per host (Agent Telemetry, network
+      table): loss above ~1% sustained or UDP 0% (Shortpath blocked)
+      degrades and drops sessions.</li>
+  <li><b>AVD agent health</b> (Host Performance) — hosts flapping between
+      Available/Unavailable drop their sessions; check the RDAgent services
+      row in Agent Telemetry.</li>
+  <li>Idle-logoff policies also produce short sessions by design — check
+      the Disconnected / long-idle table before blaming the network.</li>
+</ol>
+
+<h2 id="t-host">6 · Playbook: one bad host</h2>
+<p class="path"><b>Path:</b> Host Experience → click the host → Host Detail window</p>
+<ol class="steps">
+  <li>The <b>latest agent snapshot</b> tiles answer most of it at a glance:
+      CPU %, CPU queue (&gt;2/core = waiting threads), free memory, SMB ms,
+      free disk % (&lt;15% → profile/temp bloat), loss %, UDP, stopped
+      services, active vs disconnected counts.</li>
+  <li><b>Stopped services</b> — <code>RDAgent</code>/<code>RDAgentBootLoader</code>
+      stopped = broker can't use the host; <code>frxsvc</code> stopped =
+      profile failures for every logon.</li>
+  <li><b>Current sessions</b> — who is on it, their input delay, memory and
+      top CPU app. One user at 8 GB with a runaway app explains everyone
+      else's day.</li>
+  <li><b>Disconnected sessions holding memory</b> — log them off to reclaim
+      capacity.</li>
+  <li>Compare the agent resource trend with the Perf charts — if Perf is
+      empty but agent data is present, the AMA perf DCR isn't collecting
+      (onboarding runbook, Phase 0).</li>
+</ol>
+
+<h2 id="t-choppy">7 · Playbook: choppy / frozen screens</h2>
+<p class="path"><b>Path:</b> Network &amp; Graphics + Agent Telemetry (FPS, skipped frames)</p>
+<ol class="steps">
+  <li><b>FPS</b> below ~15 sustained = users see stutter. Check which
+      resource starves it: <b>frames skipped (server)</b> = host CPU/GPU;
+      <b>(network)</b> = bandwidth/loss; <b>(client)</b> = the endpoint
+      device.</li>
+  <li><b>Encoding time</b> rising with CPU = the encoder is CPU-bound —
+      for CAD/graphics pools verify hardware encode (AVC/HEVC policies)
+      is active.</li>
+  <li><b>End-to-end delay</b> (graphics preview table) above ~200 ms feels
+      like molasses even at good FPS — usually network RTT + encode time
+      stacked.</li>
+  <li>Bandwidth panel: sustained ceiling = the pipe is the limit (VPN
+      hairpin, throttled egress).</li>
+</ol>
+
+<h2 id="alerts">8 · Alert responses</h2>
+<table>
+  <tr><th>Alert</th><th>First response</th></tr>
+  <tr><td>Success rate WARN/BAD</td><td>Errors window → dominant code; Host Performance → agent health donut for unavailable hosts.</td></tr>
+  <tr><td>Errors WARN/BAD</td><td>Top codes panel. One code = one root cause; many codes on one host = that host (Section 6).</td></tr>
+  <tr><td>Avg RTT WARN/BAD</td><td>RTT by host: all hosts = region/network; one host = its NIC/path. Check UDP % and loss.</td></tr>
+  <tr><td>Avg profile load WARN/BAD</td><td>Section 4 — SMB ms first, then profile sizes.</td></tr>
+  <tr><td>Experience score FAIR/POOR</td><td>Factor bars in the Experience Score window — triage the lowest bar via its section above.</td></tr>
+</table>
+
+<h2 id="weekly">9 · Weekly hygiene checklist</h2>
+<ul class="check">
+  <li>Score trend week-over-week (30d range) — trending down anywhere?</li>
+  <li>Top 5 worst users: recurring names? Open each detail once.</li>
+  <li>Top app consumers — is one app increasingly eating the pools?</li>
+  <li>App crash leaders — versions to update or plugins to remove.</li>
+  <li>Disconnected / long-idle sessions — log off, reclaim memory.</li>
+  <li>Free disk % per host — anything under 20%?</li>
+  <li>GPO processing creep — new policies adding seconds?</li>
+  <li>Agent feed: <code>hosts_reporting</code> equals host count?</li>
+  <li>Export CSVs (header dropdown) for anything you want to keep — the
+      agent DB retains ~14 days.</li>
+</ul>
+
+<h2 id="glossary">10 · Metric glossary</h2>
+<table>
+  <tr><th>Metric</th><th>Where</th><th>Meaning / bands</th></tr>
+  <tr><td>Score</td><td>Tables, gauge, tray pill</td><td>Weighted 0–100 composite; 90+ Excellent, 75+ Good, 60+ Fair, &lt;60 Poor.</td></tr>
+  <tr><td>Sessions</td><td>Experience tables</td><td>Distinct connections in the selected range.</td></tr>
+  <tr><td>Logon s</td><td>Tables, waterfall</td><td>Connection start → connected. Good ≤ 20 s.</td></tr>
+  <tr><td>RTT ms</td><td>Tables, charts</td><td>Round-trip latency. Good ≤ 60, users feel &gt; 150.</td></tr>
+  <tr><td>Errors</td><td>Tables, Errors window</td><td>WVDErrors rows attributed to the entity.</td></tr>
+  <tr><td>Short %</td><td>Experience tables</td><td>Sessions &lt; 5 min — churn. Good ≤ 5%.</td></tr>
+  <tr><td>Profile s</td><td>Tables, FSLogix window</td><td>FSLogix load time. Good ≤ 10 s.</td></tr>
+  <tr><td>Input ms</td><td>Tables, agent charts</td><td>Max input delay per session — the "feels laggy" metric. Good ≤ 80 ms.</td></tr>
+  <tr><td>Crashes</td><td>Tables, agent panel</td><td>App crashes (Event 1000) + hangs (1002).</td></tr>
+  <tr><td>CPU queue</td><td>Host tables/tiles</td><td>Threads waiting for CPU. &gt; ~2 per core = saturation even at modest CPU%.</td></tr>
+  <tr><td>Commit %</td><td>Host table</td><td>Committed memory vs limit. &gt; 90% → paging imminent.</td></tr>
+  <tr><td>SMB ms</td><td>Host tables/tiles</td><td>Profile-share request latency. Good ≤ 20 ms.</td></tr>
+  <tr><td>Retrans/s</td><td>Host network table</td><td>TCP segments retransmitted — path quality independent of RDP.</td></tr>
+  <tr><td>Loss %</td><td>Host tables/tiles</td><td>RDP packet loss. &gt; 1% sustained is felt.</td></tr>
+  <tr><td>UDP %</td><td>Host network table</td><td>Samples with UDP/Shortpath active. 0% = Shortpath blocked → extra latency.</td></tr>
+  <tr><td>FPS / Encoding ms</td><td>Graphics panels</td><td>Frames delivered / encode cost. FPS &lt; 15 = visible stutter.</td></tr>
+  <tr><td>Act / Disc</td><td>Host table, tiles</td><td>Active vs disconnected session counts — disconnected still hold RAM.</td></tr>
+  <tr><td>Idle min</td><td>Session tables</td><td>Minutes since last input (quser).</td></tr>
+  <tr><td>GPO s</td><td>Agent panel</td><td>Group-policy processing at logon (Event 8001). &gt; 15 s → review GPOs.</td></tr>
+  <tr><td>Free disk %</td><td>Host tables/tiles</td><td>C: free space. &lt; 15% → cleanup before it breaks logons.</td></tr>
+</table>
+
+<h2 id="maint">11 · Maintenance tasks</h2>
+<table>
+  <tr><th>Task</th><th>How</th></tr>
+  <tr><td>Update the dashboard</td><td><code>git pull</code> in the app folder — uvicorn's <code>--reload</code> restarts itself. Hard restart: re-run <code>run.ps1</code> (it detects a busy port and says so).</td></tr>
+  <tr><td>Update agents</td><td>Push the new <code>AvdDexAgent.ps1</code> to <code>C:\Program Files\AvdDexAgent\</code> on hosts (or re-run the installer). Old agents keep working; new signals appear as they update.</td></tr>
+  <tr><td>Agent feed gap</td><td><code>GET /api/agent/status</code>. 503 = <code>AVD_AGENT_KEY</code> unset on server; 401s in host spool = key mismatch; nothing at all = port unreachable from hosts.</td></tr>
+  <tr><td>Rotate the agent key</td><td>New value in <code>.env</code> → restart → re-run installer on hosts. Spooled samples back-fill; no data loss.</td></tr>
+  <tr><td>Re-link / switch tenant</td><td>Connections app → Disconnect → sign in again. Queries pick the new credential up immediately.</td></tr>
+  <tr><td>Trim the telemetry DB</td><td>Automatic — <code>AVD_AGENT_RETENTION_DAYS</code> (default 14) prunes on ingest.</td></tr>
+  <tr><td>Tune bands/weights</td><td><code>backend/dex.py</code> (score factors) and <code>AVD_THR_*</code> env vars (KPI alert strip).</td></tr>
+</table>
+
+</main>
+<footer style="max-width:1000px;margin:0 auto;padding:0 28px 40px;color:var(--muted);font-size:12px">
+AVD DEX Dashboard · Operations &amp; Triage Runbook · companion to the Tenant Onboarding Runbook (/runbook)
+</footer>
+<script>
+(function () {
+  var btn = document.getElementById("theme");
+  var saved = null;
+  try { saved = localStorage.getItem("avd-runbook-theme"); } catch (e) {}
+  if (saved) document.documentElement.dataset.theme = saved;
+  btn.addEventListener("click", function () {
+    var next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem("avd-runbook-theme", next); } catch (e) {}
+  });
+})();
+</script>
+</body>
+</html>

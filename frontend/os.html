@@ -900,6 +900,8 @@ const APPS = {
         <button id="s_classic">Open single-page view</button>
         <label>Documentation</label>
         <button id="s_runbook">Tenant onboarding runbook</button>
+        <label></label>
+        <button id="s_runbook_ops">Operations &amp; triage runbook</button>
       </div>`;
       el.querySelector("#s_range").addEventListener("change", (e) => { state.range = e.target.value; refresh(); });
       el.querySelector("#s_hp").addEventListener("change", (e) => { state.hostpool = e.target.value; refresh(); });
@@ -908,6 +910,7 @@ const APPS = {
         setTheme(document.documentElement.dataset.theme === "light" ? "dark" : "light"));
       el.querySelector("#s_classic").addEventListener("click", () => window.open("/", "_blank"));
       el.querySelector("#s_runbook").addEventListener("click", () => window.open("/runbook", "_blank"));
+      el.querySelector("#s_runbook_ops").addEventListener("click", () => window.open("/runbook-ops", "_blank"));
     },
   },
   about: {
