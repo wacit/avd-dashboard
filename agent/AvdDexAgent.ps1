@@ -128,22 +128,34 @@ try {
     }
 } catch { }
 
-# Working set per session (needs elevated/SYSTEM for -IncludeUserName)
+# Working set + top app consumers per session (SYSTEM sees all sessions)
 try {
     $bySession = Get-Process | Group-Object SessionId
     foreach ($g in $bySession) {
         $sid = [int]$g.Name
         if ($sid -eq 0 -or -not $sessionMap.ContainsKey($sid)) { continue }
         $memMb = [math]::Round((($g.Group | Measure-Object WorkingSet64 -Sum).Sum) / 1MB, 0)
+        $topMem = $g.Group | Sort-Object WorkingSet64 -Descending | Select-Object -First 1
+        $topCpu = $g.Group | Where-Object { $_.TotalProcessorTime } |
+            Sort-Object { $_.TotalProcessorTime.TotalSeconds } -Descending | Select-Object -First 1
         $existing = $sessions | Where-Object { $_.session_id -eq $sid } | Select-Object -First 1
-        if ($existing) { $existing.mem_mb = $memMb }
-        else {
+        if (-not $existing) {
             $info = $sessionMap[$sid]
-            [void]$sessions.Add(@{
+            $existing = @{
                 session_id = $sid; user = $info.User
                 state = $info.State; idle_min = $info.IdleMin
-                input_delay_ms = $null; mem_mb = $memMb
-            })
+                input_delay_ms = $null; mem_mb = $null
+            }
+            [void]$sessions.Add($existing)
+        }
+        $existing.mem_mb = $memMb
+        if ($topMem) {
+            $existing.top_proc = $topMem.ProcessName
+            $existing.top_proc_mem_mb = [math]::Round($topMem.WorkingSet64 / 1MB, 0)
+        }
+        if ($topCpu) {
+            $existing.top_cpu_proc = $topCpu.ProcessName
+            $existing.top_cpu_proc_s = [math]::Round($topCpu.TotalProcessorTime.TotalSeconds, 0)
         }
     }
 } catch { }
@@ -176,18 +188,55 @@ $skipped = $null
 $skipVals = @($skipServer, $skipNet, $skipClient) | Where-Object { $_ -ne $null }
 if ($skipVals.Count -gt 0) { $skipped = [math]::Round(($skipVals | Measure-Object -Sum).Sum, 2) }
 
+# Host saturation / memory pressure / network quality / profile share
+$smbSec = Get-CounterAvg '\SMB Client Shares(*)\Avg. sec/Data Request'
+$diskFreePct = $null
+try {
+    $sysDisk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='C:'"
+    if ($sysDisk.Size -gt 0) {
+        $diskFreePct = [math]::Round($sysDisk.FreeSpace / $sysDisk.Size * 100, 1)
+    }
+} catch { }
+
+# Critical AVD/FSLogix services that are installed but not running
+$unhealthy = New-Object System.Collections.ArrayList
+foreach ($svcName in @('RDAgent', 'RDAgentBootLoader', 'TermService', 'frxsvc')) {
+    try {
+        $svc = Get-Service -Name $svcName -ErrorAction Stop
+        if ($svc.Status -ne 'Running') { [void]$unhealthy.Add($svcName) }
+    } catch { }
+}
+
+# Session mix: disconnected sessions hold resources without delivering UX
+$sessActive = 0; $sessDisc = 0
+foreach ($info in $sessionMap.Values) {
+    if ($info.State -match '^(?i)Act') { $sessActive++ }
+    elseif ($info.State -match '^(?i)Disc') { $sessDisc++ }
+}
+
 $hostMetrics = @{
-    cpu_pct           = Get-CounterAvg '\Processor(_Total)\% Processor Time'
-    mem_free_mb       = Get-CounterAvg '\Memory\Available MBytes'
-    disk_read_ms      = if ($diskRead -ne $null)  { [math]::Round($diskRead * 1000, 1) }  else { $null }
-    disk_write_ms     = if ($diskWrite -ne $null) { [math]::Round($diskWrite * 1000, 1) } else { $null }
-    rtt_ms            = $rtt
-    bandwidth_kbps    = if ($bw -ne $null) { [math]::Round($bw / 8000, 0) } else { $null }  # bps -> KBps
-    encoding_ms       = $encoding
-    fps               = $fps
-    frames_skipped_ps = $skipped
-    packet_loss_pct   = $loss
-    udp_active        = $udpActive
+    cpu_pct             = Get-CounterAvg '\Processor(_Total)\% Processor Time'
+    mem_free_mb         = Get-CounterAvg '\Memory\Available MBytes'
+    disk_read_ms        = if ($diskRead -ne $null)  { [math]::Round($diskRead * 1000, 1) }  else { $null }
+    disk_write_ms       = if ($diskWrite -ne $null) { [math]::Round($diskWrite * 1000, 1) } else { $null }
+    rtt_ms              = $rtt
+    bandwidth_kbps      = if ($bw -ne $null) { [math]::Round($bw / 8000, 0) } else { $null }  # bps -> KBps
+    encoding_ms         = $encoding
+    fps                 = $fps
+    frames_skipped_ps   = $skipped
+    packet_loss_pct     = $loss
+    udp_active          = $udpActive
+    cpu_queue           = Get-CounterAvg '\System\Processor Queue Length'
+    context_switches_ps = Get-CounterAvg '\System\Context Switches/sec'
+    pages_ps            = Get-CounterAvg '\Memory\Pages/sec'
+    mem_committed_pct   = Get-CounterAvg '\Memory\% Committed Bytes In Use'
+    tcp_retrans_ps      = Get-CounterAvg '\TCPv4\Segments Retransmitted/sec'
+    smb_latency_ms      = if ($smbSec -ne $null) { [math]::Round($smbSec * 1000, 1) } else { $null }
+    disk_queue          = Get-CounterAvg '\LogicalDisk(_Total)\Current Disk Queue Length'
+    disk_free_pct       = $diskFreePct
+    sessions_active     = $sessActive
+    sessions_disconnected = $sessDisc
+    unhealthy_services  = if ($unhealthy.Count -gt 0) { ($unhealthy -join ',') } else { $null }
 }
 
 # ---------------------------------------------------------------- events --
@@ -206,6 +255,26 @@ try {
             ts      = $ev.TimeCreated.ToUniversalTime().ToString('o')
             message = ($ev.Message -split "`n")[0]
         })
+    }
+} catch { }
+
+# GPO processing duration per logon (Event 8001: "Completed user logon
+# policy processing for DOMAIN\user in N seconds.")
+try {
+    $gpo = Get-WinEvent -FilterHashtable @{
+        LogName = 'Microsoft-Windows-GroupPolicy/Operational'; Id = 8001
+        StartTime = $since.ToLocalTime()
+    } -ErrorAction Stop
+    foreach ($ev in $gpo) {
+        if ($ev.Message -match 'for\s+(\S+)\s+in\s+(\d+)\s+second') {
+            [void]$events.Add(@{
+                kind        = 'gpo_processing'
+                user        = $Matches[1]
+                duration_ms = [double]$Matches[2] * 1000
+                ts          = $ev.TimeCreated.ToUniversalTime().ToString('o')
+                message     = ($ev.Message -split "`n")[0]
+            })
+        }
     }
 } catch { }
 

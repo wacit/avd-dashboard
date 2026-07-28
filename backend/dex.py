@@ -27,6 +27,8 @@ FACTORS = [
     {"key": "fps",             "label": "Frame rate",              "unit": "fps",  "good": 24.0, "bad": 8.0,   "weight": 5,  "higher_is_better": True,  "source": "agent"},
     {"key": "host_cpu_pct",    "label": "Host CPU pressure",       "unit": "%",    "good": 60.0, "bad": 95.0,  "weight": 5,  "higher_is_better": False, "source": "agent"},
     {"key": "app_crashes",     "label": "App crashes / hangs",     "unit": "",     "good": 0.0,  "bad": 5.0,   "weight": 5,  "higher_is_better": False, "source": "agent"},
+    {"key": "smb_latency_ms",  "label": "Profile share latency",   "unit": "ms",   "good": 20.0, "bad": 200.0, "weight": 5,  "higher_is_better": False, "source": "agent"},
+    {"key": "cpu_queue",       "label": "Host saturation (CPU queue)", "unit": "", "good": 2.0,  "bad": 12.0,  "weight": 5,  "higher_is_better": False, "source": "agent"},
 ]
 
 

@@ -471,16 +471,43 @@ const APPS = {
       el.innerHTML =
         `<div class="note">${note}</div>
          <h5 class="sect">Input delay by user (ms)</h5>${chartBox("ci_" + id)}
-         <h5 class="sect">Host resources</h5><div id="th_${id}"></div>
+         <h5 class="sect">Host resources &amp; saturation</h5><div id="th_${id}"></div>
+         <h5 class="sect">Network quality &amp; storage</h5><div id="tn_${id}"></div>
+         <h5 class="sect">Top app consumers</h5><div id="ta_${id}"></div>
+         <h5 class="sect">GPO processing by user (logon)</h5><div id="tg_${id}"></div>
+         <h5 class="sect">Unhealthy AVD / FSLogix services</h5><div id="tv_${id}"></div>
          <h5 class="sect">Disconnected / long-idle sessions</h5><div id="ti_${id}"></div>
          <h5 class="sect">App crashes &amp; hangs</h5><div id="tc_${id}"></div>`;
       drawOrEmpty(id, el, "ci_" + id, a.input_delay_by_user,
         (rows) => barCfg(rows, "User", [{ key: "AvgInputDelayMs", label: "Avg ms" }, { key: "MaxInputDelayMs", label: "Max ms" }]));
       el.querySelector("#th_" + id).innerHTML = tableHTML(a.host_resources, [
         { key: "Host", label: "Host" }, { key: "AvgCpuPct", label: "CPU %", num: true },
-        { key: "MinMemFreeMb", label: "Free MB", num: true }, { key: "AvgRttMs", label: "RTT ms", num: true },
-        { key: "AvgLossPct", label: "Loss %", num: true }, { key: "AvgFps", label: "FPS", num: true },
-        { key: "UdpPct", label: "UDP %", num: true },
+        { key: "AvgCpuQueue", label: "Queue", num: true },
+        { key: "MinMemFreeMb", label: "Free MB", num: true },
+        { key: "AvgCommitPct", label: "Commit %", num: true },
+        { key: "MaxActive", label: "Act", num: true }, { key: "MaxDisc", label: "Disc", num: true },
+      ]);
+      el.querySelector("#tn_" + id).innerHTML = tableHTML(a.host_resources, [
+        { key: "Host", label: "Host" }, { key: "AvgRttMs", label: "RTT ms", num: true },
+        { key: "AvgLossPct", label: "Loss %", num: true },
+        { key: "AvgRetransPs", label: "Retrans/s", num: true },
+        { key: "UdpPct", label: "UDP %", num: true }, { key: "AvgFps", label: "FPS", num: true },
+        { key: "AvgSmbMs", label: "SMB ms", num: true },
+        { key: "AvgDiskReadMs", label: "Disk ms", num: true },
+        { key: "MinDiskFreePct", label: "Free disk %", num: true },
+      ]);
+      el.querySelector("#ta_" + id).innerHTML = tableHTML(a.top_apps, [
+        { key: "App", label: "Process" }, { key: "Users", label: "Users", num: true },
+        { key: "MaxCpuSec", label: "Max CPU s", num: true },
+        { key: "MaxMemMb", label: "Max mem MB", num: true },
+      ]);
+      el.querySelector("#tg_" + id).innerHTML = tableHTML(a.gpo_times, [
+        { key: "User", label: "User" }, { key: "AvgGpoSec", label: "Avg s", num: true },
+        { key: "MaxGpoSec", label: "Max s", num: true }, { key: "Logons", label: "Logons", num: true },
+      ]);
+      el.querySelector("#tv_" + id).innerHTML = tableHTML(a.services, [
+        { key: "Host", label: "Host" }, { key: "Services", label: "Stopped services" },
+        { key: "LastSeen", label: "Last seen" },
       ]);
       el.querySelector("#ti_" + id).innerHTML = tableHTML(a.idle_sessions, [
         { key: "User", label: "User" }, { key: "Host", label: "Host" }, { key: "State", label: "State" },

@@ -25,9 +25,16 @@ Data comes from two sources:
    `WVDAgentHealthStatus`, `Perf`).
 2. **The AVD DEX agent** (this repo, `agent/`) — a lightweight PowerShell
    collector on each session host that reports the in-session signals Log
-   Analytics cannot see: input delay per user, frame rate / encoding time,
-   RDP RTT from the host side, disk latency, per-session memory, app
-   crashes/hangs and FSLogix profile-load events.
+   Analytics cannot see, across ten signal groups: (1) input delay per
+   user + session state/idle time, (2) RDP network quality (RTT,
+   bandwidth, packet loss, UDP/Shortpath use), (3) TCP retransmissions,
+   (4) frame rate / encoding / skipped frames, (5) host saturation (CPU %,
+   processor queue, context switches), (6) memory pressure (free MB,
+   pages/sec, commit %), (7) storage health (disk latency/queue, free
+   disk %, FSLogix SMB share latency), (8) per-session top app consumers
+   (CPU + memory), (9) logon detail (GPO processing time per user, FSLogix
+   profile loads) and app crashes/hangs, (10) AVD/FSLogix service health
+   and active-vs-disconnected session mix.
 
 ## What's on the page
 
@@ -65,6 +72,8 @@ Each factor maps a raw metric linearly onto 0-100 between a "good" and
 | Host CPU pressure | DEX agent | 60% | 95% | 5 |
 | App crashes / hangs | DEX agent | 0 | 5 | 5 |
 | Packet loss | DEX agent | 0.5% | 5% | 5 |
+| Profile share latency (SMB) | DEX agent | 20 ms | 200 ms | 5 |
+| Host saturation (CPU queue) | DEX agent | 2 | 12 | 5 |
 
 The factor set follows the DEX failure modes described by eG Innovations and
 RDPSoft (Remote Desktop Commander): latency, packet loss, UDP (Shortpath)

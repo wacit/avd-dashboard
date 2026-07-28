@@ -116,7 +116,8 @@ def _build_entities(data: dict, kind: str, agent_map: dict) -> list[dict]:
             metrics["errors_per_conn"] = (e.get("errors") or 0) / max(connected, 1)
 
         agent = agent_map.get(_short_name(name)) or {}
-        for k in ("input_delay_ms", "fps", "host_cpu_pct", "app_crashes", "packet_loss_pct"):
+        for k in ("input_delay_ms", "fps", "host_cpu_pct", "app_crashes",
+                  "packet_loss_pct", "smb_latency_ms", "cpu_queue"):
             if agent.get(k) is not None:
                 metrics[k] = agent[k]
 
@@ -168,7 +169,8 @@ def _env_metrics(data: dict, agent_env: dict) -> dict:
     metrics["rtt_ms"] = _wavg(data.get("user_rtt"), "AvgRTT")
     metrics["profile_sec"] = _wavg(data.get("user_profile"), "AvgSec")
     metrics["short_session_pct"] = _wavg(data.get("user_stability"), "ShortPct", "Sessions")
-    for k in ("input_delay_ms", "fps", "host_cpu_pct", "app_crashes", "packet_loss_pct"):
+    for k in ("input_delay_ms", "fps", "host_cpu_pct", "app_crashes",
+              "packet_loss_pct", "smb_latency_ms", "cpu_queue"):
         if agent_env.get(k) is not None:
             metrics[k] = agent_env[k]
     return metrics

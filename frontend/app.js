@@ -16,6 +16,9 @@ const DATASETS = {
   "Agent — input delay over time": ["dexagent", "input_delay_timeseries"],
   "Agent — host resources": ["dexagent", "host_resources"],
   "Agent — idle/disconnected sessions": ["dexagent", "idle_sessions"],
+  "Agent — top app consumers": ["dexagent", "top_apps"],
+  "Agent — GPO processing": ["dexagent", "gpo_times"],
+  "Agent — unhealthy services": ["dexagent", "services"],
   "Agent — app crashes": ["dexagent", "crashes"],
   "Agent — profile loads": ["dexagent", "profile_loads"],
   "Connections — over time": ["connections", "timeseries"],
@@ -439,12 +442,35 @@ async function load() {
     renderTable("a_hosts", dexAgent.host_resources, [
       { key: "Host", label: "Host" },
       { key: "AvgCpuPct", label: "CPU %", num: true },
+      { key: "AvgCpuQueue", label: "Queue", num: true },
       { key: "MinMemFreeMb", label: "Min free MB", num: true },
-      { key: "AvgDiskReadMs", label: "Disk read ms", num: true },
+      { key: "AvgCommitPct", label: "Commit %", num: true },
+      { key: "AvgSmbMs", label: "SMB ms", num: true },
+      { key: "MinDiskFreePct", label: "Free disk %", num: true },
       { key: "AvgRttMs", label: "RTT ms", num: true },
       { key: "AvgLossPct", label: "Loss %", num: true },
+      { key: "AvgRetransPs", label: "Retrans/s", num: true },
       { key: "AvgFps", label: "FPS", num: true },
       { key: "UdpPct", label: "UDP %", num: true },
+      { key: "MaxActive", label: "Act", num: true },
+      { key: "MaxDisc", label: "Disc", num: true },
+    ]);
+    renderTable("a_topapps", dexAgent.top_apps, [
+      { key: "App", label: "Process" },
+      { key: "Users", label: "Users", num: true },
+      { key: "MaxCpuSec", label: "Max CPU s", num: true },
+      { key: "MaxMemMb", label: "Max mem MB", num: true },
+    ]);
+    renderTable("a_gpo", dexAgent.gpo_times, [
+      { key: "User", label: "User" },
+      { key: "AvgGpoSec", label: "Avg s", num: true },
+      { key: "MaxGpoSec", label: "Max s", num: true },
+      { key: "Logons", label: "Logons", num: true },
+    ]);
+    renderTable("a_services", dexAgent.services, [
+      { key: "Host", label: "Host" },
+      { key: "Services", label: "Stopped services" },
+      { key: "LastSeen", label: "Last seen" },
     ]);
     renderTable("a_idle", dexAgent.idle_sessions, [
       { key: "User", label: "User" },
